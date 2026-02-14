@@ -55,37 +55,30 @@ export class ETACalculator {
     let isEstimate: boolean;
     let legArrivals: LegArrivalInfo[];
 
-    // 실시간 정보가 조회된 구간을 식별 (startStation 기준)
-    const coveredStations = new Set(
-      allArrivals.map((a) => a.startStation).filter(Boolean)
+    // route.legs 순서대로 도착 정보를 구성 (실시간 정보 유무와 관계없이 순서 유지)
+    const transitLegs = route.legs.filter(
+      (leg) => leg.type === "bus" || leg.type === "subway"
     );
 
-    if (allArrivals.length > 0) {
-      // 실시간 정보가 있는 경우: 첫 번째 구간의 가장 빠른 도착 시간을 대기 시간으로 사용
-      waitTime = allArrivals[0].arrivals[0]?.arrivalTime ?? 0;
-      isEstimate = false;
+    legArrivals = [];
+    for (const leg of transitLegs) {
+      const realtimeData = allArrivals.find(
+        (a) => a.startStation === (leg.startStation ?? undefined)
+      );
 
-      // 실시간 정보가 있는 구간의 도착 정보
-      legArrivals = allArrivals.flatMap(
-        ({ type, arrivals, startStation, endStation }) =>
-          arrivals.map((a) => ({
-            type,
+      if (realtimeData && realtimeData.arrivals.length > 0) {
+        for (const a of realtimeData.arrivals) {
+          legArrivals.push({
+            type: realtimeData.type,
             lineName: a.lineName,
             arrivalMessage: a.arrivalMessage,
             arrivalTime: a.arrivalTime,
-            startStation,
-            endStation,
+            startStation: realtimeData.startStation,
+            endStation: realtimeData.endStation,
             destination: a.destination,
-          }))
-      );
-
-      // 실시간 정보가 없는 대중교통 구간에 대해 fallback 추가
-      const missingLegs = route.legs.filter(
-        (leg) =>
-          (leg.type === "bus" || leg.type === "subway") &&
-          !coveredStations.has(leg.startStation ?? undefined)
-      );
-      for (const leg of missingLegs) {
+          });
+        }
+      } else {
         for (const name of leg.lineNames) {
           legArrivals.push({
             type: leg.type as "bus" | "subway",
@@ -99,29 +92,18 @@ export class ETACalculator {
           });
         }
       }
+    }
+
+    if (allArrivals.length > 0) {
+      waitTime = allArrivals[0].arrivals[0]?.arrivalTime ?? 0;
+      isEstimate = false;
     } else {
-      // 실시간 정보가 없는 경우: 모든 대중교통 구간의 노선 정보를 표시
-      const transitLegs = route.legs.filter(
-        (leg) => leg.type === "bus" || leg.type === "subway"
-      );
       const firstType = transitLegs[0]?.type as "bus" | "subway" | undefined;
       waitTime =
         firstType && firstType in AVERAGE_HEADWAY
           ? AVERAGE_HEADWAY[firstType]
           : AVERAGE_HEADWAY.bus;
       isEstimate = true;
-
-      legArrivals = transitLegs.flatMap((leg) =>
-        leg.lineNames.map((name) => ({
-          type: leg.type as "bus" | "subway",
-          lineName: name,
-          arrivalMessage: "실시간 정보 없음",
-          arrivalTime:
-            AVERAGE_HEADWAY[leg.type as "bus" | "subway"] ?? AVERAGE_HEADWAY.bus,
-          startStation: leg.startStation ?? undefined,
-          endStation: leg.endStation ?? undefined,
-        }))
-      );
     }
 
     // T_travel: 총 소요 시간 (분, DB 저장값)
