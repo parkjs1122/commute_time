@@ -78,8 +78,8 @@ export interface ErrorResponse {
 }
 
 // Prisma SavedRoute with legs included
-export type SavedRouteWithLegs = import("@/generated/prisma/client").SavedRoute & {
-  legs: import("@/generated/prisma/client").RouteLeg[];
+export type SavedRouteWithLegs = import("@prisma/client").SavedRoute & {
+  legs: import("@prisma/client").RouteLeg[];
 };
 
 // 경로 저장 요청
