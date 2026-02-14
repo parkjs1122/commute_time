@@ -606,7 +606,7 @@ export class RealtimeTransitService {
           lineName,
           direction,
           arrivalTime: arrivalSeconds,
-          arrivalMessage: item.arvlMsg2 || item.arvlMsg3 || "정보 없음",
+          arrivalMessage: (item.arvlMsg2 || item.arvlMsg3 || "정보 없음").replace(/\[(\d+)]/g, "$1"),
           remainingStops: undefined,
           vehicleType: item.btrainSttus || "지하철",
           isLastTrain: item.lstcarAt === "1",
