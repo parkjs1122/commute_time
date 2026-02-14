@@ -43,7 +43,19 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: "jwt",
-    maxAge: 7 * 24 * 60 * 60, // 7일
+    maxAge: 30 * 24 * 60 * 60, // 30일
+  },
+  cookies: {
+    sessionToken: {
+      name: "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 30 * 24 * 60 * 60, // 30일 (브라우저 종료 후에도 유지)
+      },
+    },
   },
   callbacks: {
     async jwt({ token, user }) {
