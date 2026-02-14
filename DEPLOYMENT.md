@@ -85,22 +85,20 @@ npx prisma migrate deploy
 
 ## 주의사항
 
-### Vercel Pro 플랜 권장
+### Prisma 엔진 바이너리
 
-이 애플리케이션의 경로 검색 API(`/api/routes/search`)는 Puppeteer와 @sparticuz/chromium을 사용하여 카카오맵 경로를 파싱합니다. 이 작업은 다음과 같은 리소스가 필요합니다:
+`prisma/schema.prisma`에 Vercel 서버리스 런타임용 바이너리 타겟이 설정되어 있습니다:
 
-- **함수 실행 시간**: 최대 60초 (Hobby 플랜 기본 10초 제한 초과)
-- **메모리**: 1024MB
+```prisma
+binaryTargets = ["native", "rhel-openssl-3.0.x"]
+```
 
-`vercel.json`에 이 설정이 포함되어 있지만, **Vercel Pro 플랜** 이상에서만 60초 타임아웃이 지원됩니다. Hobby 플랜에서는 최대 10초로 제한되어 경로 검색이 실패할 수 있습니다.
+- `native`: 로컬 개발 환경
+- `rhel-openssl-3.0.x`: Vercel 서버리스 환경
 
-### Chromium 바이너리
+### 경로 검색 캐시
 
-@sparticuz/chromium 패키지는 Vercel의 서버리스 환경에서 자동으로 Chromium 바이너리를 다운로드합니다. 추가 설정은 필요하지 않습니다.
-
-### 캐시
-
-경로 검색 결과는 데이터베이스(RouteCache 테이블)에 24시간 동안 캐시됩니다. 이는 Puppeteer 호출 횟수를 줄여 성능을 개선합니다.
+경로 검색 결과는 데이터베이스(RouteCache 테이블)에 24시간 동안 캐시됩니다. 이를 통해 카카오맵 API 호출 횟수를 줄여 성능을 개선합니다.
 
 ### 환경별 NEXTAUTH_URL
 
