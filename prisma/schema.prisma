@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  savedRoutes  SavedRoute[]
+}
+
+model SavedRoute {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alias         String
+  isDefault     Boolean    @default(false)
+
+  // 출발지
+  originName    String
+  originAddress String
+  originLat     Float
+  originLng     Float
+
+  // 목적지
+  destName      String
+  destAddress   String
+  destLat       Float
+  destLng       Float
+
+  // 경로 요약
+  totalTime     Int        // 총 소요 시간 (분)
+  transferCount Int        // 환승 횟수
+  fare          Int?       // 예상 요금 (원)
+
+  legs          RouteLeg[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([userId])
+}
+
+model RouteLeg {
+  id             String     @id @default(cuid())
+  savedRouteId   String
+  savedRoute     SavedRoute @relation(fields: [savedRouteId], references: [id], onDelete: Cascade)
+  order          Int        // Leg 순서 (0부터)
+
+  type           String     // "bus" | "subway" | "walk"
+  lineNames      String[]   @default([])  // 노선 번호/이름 배열
+  lineColor      String?    // 노선 색상
+  startStation   String?    // 승차 정류장
+  endStation     String?    // 하차 정류장
+  startStationId String?    // 공공데이터 정류장 ID
+  stationCount   Int?       // 정차 역 수
+  sectionTime    Int        // 구간 소요 시간 (분)
+  distance       Int?       // 구간 거리 (미터)
+
+  @@index([savedRouteId])
+}
+
+model RouteCache {
+  id        String   @id @default(cuid())
+  originKey String   // "lat,lng" 형태
+  destKey   String   // "lat,lng" 형태
+  routeData Json     // TransitRoute[] JSON
+  createdAt DateTime @default(now())
+  expiresAt DateTime // 캐시 만료 (기본 24시간)
+
+  @@unique([originKey, destKey])
+  @@index([expiresAt])
+}
