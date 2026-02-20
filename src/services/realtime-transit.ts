@@ -766,6 +766,7 @@ export class RealtimeTransitService {
       "1081": "경강선",
       "1094": "신림선",
       "1032": "GTX-A",
+      "1071": "인천1호선",
     };
     return lineMap[subwayId] || `노선 ${subwayId}`;
   }
