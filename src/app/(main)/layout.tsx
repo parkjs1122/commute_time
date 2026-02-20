@@ -13,6 +13,7 @@ function NavBar() {
   const navItems = [
     { href: "/", label: "대시보드" },
     { href: "/routes", label: "경로 관리" },
+    { href: "/profile", label: "마이페이지" },
   ];
 
   function isActive(href: string) {
