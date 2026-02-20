@@ -61,6 +61,14 @@ export default function ProfilePage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // 비밀번호 변경
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
   useEffect(() => {
     async function fetchProfile() {
       try {
@@ -79,6 +87,47 @@ export default function ProfilePage() {
     }
     fetchProfile();
   }, []);
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(false);
+
+    if (newPassword !== newPasswordConfirm) {
+      setPasswordError("새 비밀번호가 일치하지 않습니다.");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError("새 비밀번호는 8자 이상이어야 합니다.");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const response = await fetch("/api/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+
+      if (response.ok) {
+        setPasswordSuccess(true);
+        setCurrentPassword("");
+        setNewPassword("");
+        setNewPasswordConfirm("");
+      } else {
+        const data = await response.json();
+        setPasswordError(
+          data?.error?.message || "비밀번호 변경에 실패했습니다."
+        );
+      }
+    } catch {
+      setPasswordError("비밀번호 변경 중 오류가 발생했습니다.");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  }
 
   async function handleDeleteAccount() {
     setIsDeleting(true);
@@ -153,6 +202,85 @@ export default function ProfilePage() {
             </dd>
           </div>
         </dl>
+      </div>
+
+      {/* 비밀번호 변경 */}
+      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <h2 className="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">
+          비밀번호 변경
+        </h2>
+
+        {passwordError && (
+          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+            {passwordError}
+          </div>
+        )}
+
+        {passwordSuccess && (
+          <div className="mb-4 rounded-md bg-green-50 p-3 text-sm text-green-600 dark:bg-green-900/20 dark:text-green-400">
+            비밀번호가 변경되었습니다.
+          </div>
+        )}
+
+        <form onSubmit={handleChangePassword} className="space-y-3">
+          <div>
+            <label
+              htmlFor="currentPassword"
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              현재 비밀번호
+            </label>
+            <input
+              id="currentPassword"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="newPassword"
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              새 비밀번호
+            </label>
+            <input
+              id="newPassword"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              placeholder="8자 이상 입력해주세요"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="newPasswordConfirm"
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              새 비밀번호 확인
+            </label>
+            <input
+              id="newPasswordConfirm"
+              type="password"
+              value={newPasswordConfirm}
+              onChange={(e) => setNewPasswordConfirm(e.target.value)}
+              required
+              placeholder="새 비밀번호를 다시 입력해주세요"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isChangingPassword}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isChangingPassword ? "변경 중..." : "비밀번호 변경"}
+          </button>
+        </form>
       </div>
 
       {/* 계정 삭제 */}
