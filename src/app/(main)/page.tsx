@@ -358,23 +358,19 @@ function RefreshIndicator({
   onManualRefresh: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
-      <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-gray-400 dark:text-gray-500">
         {isRefreshing ? (
-          <>
-            <Spinner className="h-4 w-4" />
-            <span>갱신 중...</span>
-          </>
+          <span className="flex items-center gap-1.5">
+            <Spinner className="h-3.5 w-3.5" />
+            갱신 중...
+          </span>
         ) : (
           <>
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
-            <span>마지막 갱신: {formatLastUpdated(lastUpdated)}</span>
-            <span className="text-gray-400 dark:text-gray-500">({countdown}초 후 자동 갱신)</span>
+            {formatLastUpdated(lastUpdated)} 갱신 · {countdown}초 후
           </>
         )}
-      </div>
+      </span>
       <button
         onClick={onManualRefresh}
         disabled={isRefreshing}
@@ -490,7 +486,15 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">대시보드</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">대시보드</h1>
+        <RefreshIndicator
+          lastUpdated={data.lastUpdated}
+          isRefreshing={isRefreshing}
+          countdown={countdown}
+          onManualRefresh={handleManualRefresh}
+        />
+      </div>
       <PrimaryETACard route={primaryRoute} />
       {additionalRoutes.length > 0 && (
         <div className="space-y-3">
@@ -500,12 +504,6 @@ export default function DashboardPage() {
           ))}
         </div>
       )}
-      <RefreshIndicator
-        lastUpdated={data.lastUpdated}
-        isRefreshing={isRefreshing}
-        countdown={countdown}
-        onManualRefresh={handleManualRefresh}
-      />
     </div>
   );
 }
