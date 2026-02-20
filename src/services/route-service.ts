@@ -39,7 +39,6 @@ export const RouteService = {
     const routeCreateData = {
       userId,
       alias: data.alias,
-      isDefault: data.isDefault,
       routeType: data.routeType,
       originName: data.origin.name,
       originAddress: data.origin.roadAddress || data.origin.address,
@@ -68,22 +67,6 @@ export const RouteService = {
       },
     };
 
-    // isDefault가 true이면 기존 기본 경로 해제 후 생성 (트랜잭션)
-    if (data.isDefault) {
-      return prisma.$transaction(async (tx) => {
-        await tx.savedRoute.updateMany({
-          where: { userId, isDefault: true },
-          data: { isDefault: false },
-        });
-
-        return tx.savedRoute.create({
-          data: routeCreateData,
-          include: INCLUDE_ORDERED_LEGS,
-        });
-      });
-    }
-
-    // isDefault가 false인 경우 바로 생성
     return prisma.savedRoute.create({
       data: routeCreateData,
       include: INCLUDE_ORDERED_LEGS,
@@ -112,6 +95,20 @@ export const RouteService = {
     return prisma.savedRoute.update({
       where: { id: routeId },
       data: { alias },
+      include: INCLUDE_ORDERED_LEGS,
+    });
+  },
+
+  /**
+   * 경로 타입을 수정합니다.
+   * 소유자 확인 후 업데이트합니다.
+   */
+  async updateRouteType(routeId: string, userId: string, routeType: string) {
+    await this.findRouteOrThrow(routeId, userId);
+
+    return prisma.savedRoute.update({
+      where: { id: routeId },
+      data: { routeType },
       include: INCLUDE_ORDERED_LEGS,
     });
   },

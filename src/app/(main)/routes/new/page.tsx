@@ -123,11 +123,10 @@ function AliasDialog({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (alias: string, isDefault: boolean, routeType: RouteType) => void;
+  onConfirm: (alias: string, routeType: RouteType) => void;
   isLoading: boolean;
 }) {
   const [alias, setAlias] = useState("");
-  const [isDefault, setIsDefault] = useState(false);
   const [routeType, setRouteType] = useState<RouteType>("commute");
 
   if (!isOpen) return null;
@@ -135,7 +134,7 @@ function AliasDialog({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (alias.trim()) {
-      onConfirm(alias.trim(), isDefault, routeType);
+      onConfirm(alias.trim(), routeType);
     }
   }
 
@@ -194,18 +193,6 @@ function AliasDialog({
                 </label>
               ))}
             </div>
-          </div>
-
-          <div className="mb-5">
-            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-              <input
-                type="checkbox"
-                checked={isDefault}
-                onChange={(e) => setIsDefault(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              기본 경로로 설정
-            </label>
           </div>
 
           <div className="flex gap-2">
@@ -312,7 +299,7 @@ export default function NewRoutePage() {
     setSaveError(null);
   }
 
-  async function handleSaveConfirm(alias: string, isDefault: boolean, routeType: RouteType) {
+  async function handleSaveConfirm(alias: string, routeType: RouteType) {
     if (!selectedRoute || !origin || !destination) return;
 
     setIsSaving(true);
@@ -324,7 +311,6 @@ export default function NewRoutePage() {
         origin,
         destination,
         route: selectedRoute,
-        isDefault,
         routeType,
       };
 

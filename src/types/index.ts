@@ -92,7 +92,6 @@ export interface SaveRouteRequest {
   origin: Place;
   destination: Place;
   route: TransitRoute;
-  isDefault: boolean;
   routeType: RouteType;
 }
 

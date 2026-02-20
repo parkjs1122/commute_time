@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { RouteService } from "@/services/route-service";
 import { requireAuth, parseRequestBody, handleApiError, BadRequestError } from "@/lib/errors";
 
+const VALID_ROUTE_TYPES = ["commute", "return", "other"];
+
 /**
  * PATCH /api/routes/[id]
- * 경로 별칭을 수정합니다.
+ * 경로 별칭 또는 경로 타입을 수정합니다.
  */
 export async function PATCH(
   request: NextRequest,
@@ -13,17 +15,32 @@ export async function PATCH(
   try {
     const session = await requireAuth();
     const { id } = await params;
-    const body = await parseRequestBody<{ alias: string }>(request);
+    const body = await parseRequestBody<{ alias?: string; routeType?: string }>(request);
 
-    if (!body.alias || typeof body.alias !== "string") {
-      throw new BadRequestError("alias 필드가 필요합니다.");
+    if (!body.alias && !body.routeType) {
+      throw new BadRequestError("alias 또는 routeType 필드가 필요합니다.");
     }
 
-    const updatedRoute = await RouteService.updateAlias(
-      id,
-      session.user.id,
-      body.alias
-    );
+    let updatedRoute;
+
+    if (body.alias && typeof body.alias === "string") {
+      updatedRoute = await RouteService.updateAlias(
+        id,
+        session.user.id,
+        body.alias
+      );
+    }
+
+    if (body.routeType) {
+      if (!VALID_ROUTE_TYPES.includes(body.routeType)) {
+        throw new BadRequestError("routeType은 commute, return, other 중 하나여야 합니다.");
+      }
+      updatedRoute = await RouteService.updateRouteType(
+        id,
+        session.user.id,
+        body.routeType
+      );
+    }
 
     return NextResponse.json(updatedRoute);
   } catch (error) {

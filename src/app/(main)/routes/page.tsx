@@ -50,13 +50,13 @@ function RouteCard({
   route,
   onEditAlias,
   onDelete,
-  onSetDefault,
+  onChangeRouteType,
   onError,
 }: {
   route: SavedRouteData;
   onEditAlias: (id: string, currentAlias: string) => void;
   onDelete: (id: string, alias: string) => void;
-  onSetDefault: (id: string) => void;
+  onChangeRouteType: (id: string, routeType: string) => void;
   onError: (message: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -125,18 +125,11 @@ function RouteCard({
             </h3>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {ROUTE_TYPE_BADGE[route.routeType] && (
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${ROUTE_TYPE_BADGE[route.routeType].className}`}>
-              {ROUTE_TYPE_BADGE[route.routeType].label}
-            </span>
-          )}
-          {route.isDefault && (
-            <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-              기본
-            </span>
-          )}
-        </div>
+        {ROUTE_TYPE_BADGE[route.routeType] && (
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${ROUTE_TYPE_BADGE[route.routeType].className}`}>
+            {ROUTE_TYPE_BADGE[route.routeType].label}
+          </span>
+        )}
       </div>
 
       {/* 출발지 -> 목적지 */}
@@ -173,14 +166,15 @@ function RouteCard({
         >
           이름 수정
         </button>
-        {!route.isDefault && (
-          <button
-            onClick={() => onSetDefault(route.id)}
-            className="rounded-md px-2.5 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
-          >
-            기본 설정
-          </button>
-        )}
+        <select
+          value={route.routeType}
+          onChange={(e) => onChangeRouteType(route.id, e.target.value)}
+          className="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300"
+        >
+          <option value="commute">출근</option>
+          <option value="return">퇴근</option>
+          <option value="other">기타</option>
+        </select>
         <button
           onClick={() => onDelete(route.id, route.alias)}
           className="rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
@@ -316,25 +310,24 @@ export default function RoutesPage() {
     }
   }
 
-  async function handleSetDefault(id: string) {
+  async function handleChangeRouteType(id: string, routeType: string) {
     try {
-      const response = await fetch(`/api/routes/${id}/default`, {
+      const response = await fetch(`/api/routes/${id}`, {
         method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ routeType }),
       });
 
       if (response.ok) {
         setRoutes((prev) =>
-          prev.map((r) => ({
-            ...r,
-            isDefault: r.id === id,
-          }))
+          prev.map((r) => (r.id === id ? { ...r, routeType } : r))
         );
       } else {
         const data = await response.json();
-        setActionError(data?.error?.message || "기본 경로 설정에 실패했습니다.");
+        setActionError(data?.error?.message || "경로 타입 변경에 실패했습니다.");
       }
     } catch {
-      setActionError("기본 경로 설정 중 오류가 발생했습니다.");
+      setActionError("경로 타입 변경 중 오류가 발생했습니다.");
     }
   }
 
@@ -423,7 +416,7 @@ export default function RoutesPage() {
               route={route}
               onEditAlias={handleEditAlias}
               onDelete={handleDeleteClick}
-              onSetDefault={handleSetDefault}
+              onChangeRouteType={handleChangeRouteType}
               onError={setActionError}
             />
           ))}
