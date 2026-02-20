@@ -19,6 +19,7 @@ interface SavedRouteData {
   id: string;
   alias: string;
   isDefault: boolean;
+  routeType: string;
   originName: string;
   destName: string;
   totalTime: number;
@@ -26,6 +27,21 @@ interface SavedRouteData {
   fare: number | null;
   legs: RouteLegData[];
 }
+
+const ROUTE_TYPE_BADGE: Record<string, { label: string; className: string }> = {
+  commute: {
+    label: "출근",
+    className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  },
+  return: {
+    label: "퇴근",
+    className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
+  },
+  other: {
+    label: "기타",
+    className: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400",
+  },
+};
 
 /**
  * 저장된 경로 카드 컴포넌트
@@ -109,11 +125,18 @@ function RouteCard({
             </h3>
           )}
         </div>
-        {route.isDefault && (
-          <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-            기본
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {ROUTE_TYPE_BADGE[route.routeType] && (
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${ROUTE_TYPE_BADGE[route.routeType].className}`}>
+              {ROUTE_TYPE_BADGE[route.routeType].label}
+            </span>
+          )}
+          {route.isDefault && (
+            <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+              기본
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 출발지 -> 목적지 */}

@@ -23,6 +23,7 @@ model SavedRoute {
   user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   alias         String
   isDefault     Boolean    @default(false)
+  routeType     String     @default("commute") // "commute" | "return" | "other"
 
   // 출발지
   originName    String

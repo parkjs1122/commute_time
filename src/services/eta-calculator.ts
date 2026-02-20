@@ -1,6 +1,6 @@
 import { RealtimeTransitService } from "@/services/realtime-transit";
 import { RouteService } from "@/services/route-service";
-import type { ETAResult, LegArrivalInfo, DashboardResponse, SavedRouteWithLegs } from "@/types";
+import type { ETAResult, LegArrivalInfo, DashboardResponse, SavedRouteWithLegs, RouteType } from "@/types";
 import { isOffHours } from "@/lib/time-utils";
 
 /** 평균 배차 간격 (초) */
@@ -42,6 +42,7 @@ export class ETACalculator {
         isEstimate: true,
         routeId: route.id,
         routeAlias: route.alias,
+        routeType: route.routeType as RouteType,
         legArrivals: [],
       };
     }
@@ -121,6 +122,7 @@ export class ETACalculator {
       isEstimate,
       routeId: route.id,
       routeAlias: route.alias,
+      routeType: route.routeType as RouteType,
       legArrivals,
     };
   }
@@ -139,6 +141,23 @@ export class ETACalculator {
     // 모든 경로에 대해 병렬로 ETA 계산
     const etaResults = await Promise.all(
       routes.map((route) => this.calculateETA(route))
+    );
+
+    // 현재 시각(KST) 기준으로 경로 타입별 정렬
+    // 13시 이전: 출근 우선, 13시 이후: 퇴근 우선
+    const kstHour = new Date().toLocaleString("en-US", {
+      timeZone: "Asia/Seoul",
+      hour: "numeric",
+      hour12: false,
+    });
+    const isCommuteTime = Number(kstHour) < 13;
+
+    const priority: Record<string, number> = isCommuteTime
+      ? { commute: 0, other: 1, return: 2 }
+      : { return: 0, other: 1, commute: 2 };
+
+    etaResults.sort(
+      (a, b) => (priority[a.routeType] ?? 1) - (priority[b.routeType] ?? 1)
     );
 
     return {

@@ -57,6 +57,9 @@ export interface LegArrivalInfo {
   destination?: string; // 종착역 (지하철)
 }
 
+// 경로 타입
+export type RouteType = "commute" | "return" | "other";
+
 // ETA 결과
 export interface ETAResult {
   estimatedArrival: string; // ISO 8601
@@ -65,6 +68,7 @@ export interface ETAResult {
   isEstimate: boolean;
   routeId: string;
   routeAlias: string;
+  routeType: RouteType;
   legArrivals: LegArrivalInfo[];
 }
 
@@ -89,6 +93,7 @@ export interface SaveRouteRequest {
   destination: Place;
   route: TransitRoute;
   isDefault: boolean;
+  routeType: RouteType;
 }
 
 // 대시보드 응답

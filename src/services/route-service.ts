@@ -40,6 +40,7 @@ export const RouteService = {
       userId,
       alias: data.alias,
       isDefault: data.isDefault,
+      routeType: data.routeType,
       originName: data.origin.name,
       originAddress: data.origin.roadAddress || data.origin.address,
       originLat: data.origin.latitude,

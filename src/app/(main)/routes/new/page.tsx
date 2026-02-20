@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import PlaceSearchInput from "@/components/PlaceSearchInput";
 import LegDetail from "@/components/LegDetail";
 import Spinner from "@/components/Spinner";
-import type { Place, TransitRoute, SaveRouteRequest } from "@/types";
+import type { Place, TransitRoute, SaveRouteRequest, RouteType } from "@/types";
 
 /**
  * 경로 결과 카드 컴포넌트
@@ -123,18 +123,19 @@ function AliasDialog({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (alias: string, isDefault: boolean) => void;
+  onConfirm: (alias: string, isDefault: boolean, routeType: RouteType) => void;
   isLoading: boolean;
 }) {
   const [alias, setAlias] = useState("");
   const [isDefault, setIsDefault] = useState(false);
+  const [routeType, setRouteType] = useState<RouteType>("commute");
 
   if (!isOpen) return null;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (alias.trim()) {
-      onConfirm(alias.trim(), isDefault);
+      onConfirm(alias.trim(), isDefault, routeType);
     }
   }
 
@@ -161,6 +162,38 @@ function AliasDialog({
               className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
               autoFocus
             />
+          </div>
+
+          <div className="mb-4">
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              경로 타입
+            </label>
+            <div className="flex gap-3">
+              {([
+                { value: "commute", label: "출근" },
+                { value: "return", label: "퇴근" },
+                { value: "other", label: "기타" },
+              ] as const).map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex-1 cursor-pointer rounded-lg border px-3 py-2 text-center text-sm font-medium transition-colors ${
+                    routeType === option.value
+                      ? "border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/20 dark:text-blue-300"
+                      : "border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="routeType"
+                    value={option.value}
+                    checked={routeType === option.value}
+                    onChange={() => setRouteType(option.value)}
+                    className="sr-only"
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
           </div>
 
           <div className="mb-5">
@@ -279,7 +312,7 @@ export default function NewRoutePage() {
     setSaveError(null);
   }
 
-  async function handleSaveConfirm(alias: string, isDefault: boolean) {
+  async function handleSaveConfirm(alias: string, isDefault: boolean, routeType: RouteType) {
     if (!selectedRoute || !origin || !destination) return;
 
     setIsSaving(true);
@@ -292,6 +325,7 @@ export default function NewRoutePage() {
         destination,
         route: selectedRoute,
         isDefault,
+        routeType,
       };
 
       const response = await fetch("/api/routes", {
