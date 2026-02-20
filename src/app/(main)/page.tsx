@@ -489,26 +489,43 @@ export default function DashboardPage() {
     []
   );
 
-  useEffect(() => {
-    fetchDashboard();
-    intervalRef.current = setInterval(() => fetchDashboard({ silent: true }), REFRESH_INTERVAL * 1000);
-    countdownRef.current = setInterval(() => {
-      setCountdown((prev) => (prev <= 1 ? REFRESH_INTERVAL : prev - 1));
-    }, 1000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
-  }, [fetchDashboard]);
-
-  function handleManualRefresh() {
+  const startTimers = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
-    fetchDashboard({ silent: true });
     intervalRef.current = setInterval(() => fetchDashboard({ silent: true }), REFRESH_INTERVAL * 1000);
     countdownRef.current = setInterval(() => {
       setCountdown((prev) => (prev <= 1 ? REFRESH_INTERVAL : prev - 1));
     }, 1000);
+  }, [fetchDashboard]);
+
+  const stopTimers = useCallback(() => {
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboard();
+    startTimers();
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopTimers();
+      } else {
+        fetchDashboard({ silent: true });
+        startTimers();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      stopTimers();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchDashboard, startTimers, stopTimers]);
+
+  function handleManualRefresh() {
+    fetchDashboard({ silent: true });
+    startTimers();
   }
 
   if (isLoading) {
