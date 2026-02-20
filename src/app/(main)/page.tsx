@@ -389,10 +389,7 @@ function RefreshIndicator({
     <div className="flex items-center gap-2">
       <span className="text-xs text-gray-400 dark:text-gray-500">
         {isRefreshing ? (
-          <span className="flex items-center gap-1.5">
-            <Spinner className="h-3.5 w-3.5" />
-            갱신 중...
-          </span>
+          "갱신 중..."
         ) : (
           <>
             {formatLastUpdated(lastUpdated)} 갱신 · {countdown}초 후
