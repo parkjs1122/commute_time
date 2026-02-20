@@ -137,11 +137,11 @@ function LegArrivalDetail({
               </span>
             </div>
           )}
-          <div className={`space-y-${compact ? "0.5" : "1.5"} ${compact ? "" : "pl-1"}`}>
+          <div className={compact ? "space-y-1" : "space-y-1.5 pl-1"}>
             {leg.lines.map((line, lineIdx) => (
-              <div key={lineIdx} className={`flex flex-wrap items-center gap-${compact ? "1.5" : "2"}`}>
+              <div key={lineIdx} className={compact ? "flex flex-wrap items-center gap-2" : "flex flex-wrap items-center gap-2"}>
                 <TransportBadge type={line.type} lineName={line.lineName} />
-                <span className={`${compact ? "text-xs" : "text-sm"} text-gray-${compact ? "500" : "600"} dark:text-gray-${compact ? "400" : "300"}`}>
+                <span className={compact ? "text-xs text-gray-500 dark:text-gray-400" : "text-sm text-gray-600 dark:text-gray-300"}>
                   {formatGroupedMessages(line.messages)}
                 </span>
               </div>

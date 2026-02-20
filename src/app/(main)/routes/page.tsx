@@ -77,14 +77,12 @@ function RouteCard({
   onEditAlias,
   onDelete,
   onChangeRouteType,
-  onSetDefault,
   onError,
 }: {
   route: SavedRouteData;
   onEditAlias: (id: string, currentAlias: string) => void;
   onDelete: (id: string, alias: string) => void;
   onChangeRouteType: (id: string, routeType: string) => void;
-  onSetDefault: (id: string) => void;
   onError: (message: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -130,11 +128,7 @@ function RouteCard({
   }
 
   return (
-    <div className={`rounded-lg border bg-white p-4 shadow-sm dark:bg-gray-800 ${
-      route.isDefault
-        ? "border-blue-200 ring-1 ring-blue-100 dark:border-blue-700 dark:ring-blue-900/30"
-        : "border-gray-200 dark:border-gray-700"
-    }`}>
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       {/* 헤더: 별칭 + 뱃지 */}
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -152,16 +146,9 @@ function RouteCard({
               />
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <h3 className="truncate text-base font-semibold text-gray-900 dark:text-gray-100">
-                {route.alias}
-              </h3>
-              {route.isDefault && (
-                <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                  대표
-                </span>
-              )}
-            </div>
+            <h3 className="truncate text-base font-semibold text-gray-900 dark:text-gray-100">
+              {route.alias}
+            </h3>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -208,14 +195,6 @@ function RouteCard({
           value={route.routeType}
           onChange={(type) => onChangeRouteType(route.id, type)}
         />
-        {!route.isDefault && (
-          <button
-            onClick={() => onSetDefault(route.id)}
-            className="rounded-lg px-3 py-2 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
-          >
-            대표 설정
-          </button>
-        )}
         <button
           onClick={() => onDelete(route.id, route.alias)}
           className="rounded-lg px-3 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
@@ -327,29 +306,6 @@ export default function RoutesPage() {
     }
   }
 
-  async function handleSetDefault(id: string) {
-    try {
-      const response = await fetch(`/api/routes/${id}/default`, {
-        method: "PATCH",
-      });
-
-      if (response.ok) {
-        setRoutes((prev) =>
-          prev.map((r) => ({
-            ...r,
-            isDefault: r.id === id,
-          }))
-        );
-        toast("success", "대시보드 대표 경로가 변경되었습니다.");
-      } else {
-        const data = await response.json();
-        toast("error", data?.error?.message || "대표 경로 설정에 실패했습니다.");
-      }
-    } catch {
-      toast("error", "대표 경로 설정 중 오류가 발생했습니다.");
-    }
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -425,7 +381,6 @@ export default function RoutesPage() {
               onEditAlias={handleEditAlias}
               onDelete={handleDeleteClick}
               onChangeRouteType={handleChangeRouteType}
-              onSetDefault={handleSetDefault}
               onError={setActionError}
             />
           ))}
