@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import Link from "next/link";
 
 export default function RegisterPage() {
@@ -47,7 +48,18 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push("/login?registered=true");
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.ok) {
+        router.push("/");
+        router.refresh();
+      } else {
+        router.push("/login?registered=true");
+      }
     } catch {
       setError("회원가입 중 오류가 발생했습니다.");
     } finally {
