@@ -25,6 +25,7 @@ export default function PlaceSearchInput({
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedRef = useRef(false);
+  const initialMountRef = useRef(!!defaultValue);
 
   const searchPlaces = useCallback(async (searchQuery: string) => {
     if (searchQuery.trim().length === 0) {
@@ -61,6 +62,12 @@ export default function PlaceSearchInput({
   useEffect(() => {
     if (selectedRef.current) {
       selectedRef.current = false;
+      return;
+    }
+
+    // defaultValue로 마운트된 직후에는 검색하지 않음 (swap 등)
+    if (initialMountRef.current) {
+      initialMountRef.current = false;
       return;
     }
 

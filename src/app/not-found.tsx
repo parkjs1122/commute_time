@@ -2,19 +2,19 @@ import Link from "next/link";
 
 /**
  * 404 Not Found 페이지
- *
- * 존재하지 않는 경로에 접근했을 때 표시됩니다.
  */
 export default function NotFound() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-gray-950">
       <div className="w-full max-w-md text-center">
-        {/* 404 표시 */}
-        <p className="text-6xl font-bold text-gray-200 dark:text-gray-700">
-          404
-        </p>
+        {/* 404 아이콘 */}
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+          <span className="text-3xl font-bold text-gray-300 dark:text-gray-600">
+            404
+          </span>
+        </div>
 
-        <h1 className="mt-4 text-2xl font-bold text-gray-900 dark:text-gray-100">
+        <h1 className="mt-6 text-2xl font-bold text-gray-900 dark:text-gray-100">
           페이지를 찾을 수 없습니다
         </h1>
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">

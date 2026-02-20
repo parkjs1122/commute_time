@@ -3,6 +3,10 @@
 import { useState, useEffect } from "react";
 import { signOut } from "next-auth/react";
 import Spinner from "@/components/Spinner";
+import Dialog from "@/components/Dialog";
+import ErrorBanner from "@/components/ErrorBanner";
+import PasswordInput from "@/components/PasswordInput";
+import { useToast } from "@/components/ToastProvider";
 
 interface UserProfile {
   email: string;
@@ -10,51 +14,8 @@ interface UserProfile {
   createdAt: string;
 }
 
-function DeleteAccountDialog({
-  isOpen,
-  onClose,
-  onConfirm,
-  isLoading,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  isLoading: boolean;
-}) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-gray-800">
-        <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
-          계정 삭제
-        </h3>
-        <p className="mb-5 text-sm text-gray-600 dark:text-gray-300">
-          계정을 삭제하면 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없습니다.
-          정말 삭제하시겠습니까?
-        </p>
-        <div className="flex gap-2">
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-          >
-            취소
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isLoading}
-            className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
-          >
-            {isLoading ? "삭제 중..." : "삭제"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function ProfilePage() {
+  const { toast } = useToast();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +27,6 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   useEffect(() => {
@@ -91,7 +51,6 @@ export default function ProfilePage() {
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
     setPasswordError(null);
-    setPasswordSuccess(false);
 
     if (newPassword !== newPasswordConfirm) {
       setPasswordError("새 비밀번호가 일치하지 않습니다.");
@@ -112,7 +71,7 @@ export default function ProfilePage() {
       });
 
       if (response.ok) {
-        setPasswordSuccess(true);
+        toast("success", "비밀번호가 변경되었습니다.");
         setCurrentPassword("");
         setNewPassword("");
         setNewPasswordConfirm("");
@@ -137,11 +96,11 @@ export default function ProfilePage() {
         await signOut({ callbackUrl: "/login" });
       } else {
         const data = await response.json();
-        setError(data?.error?.message || "계정 삭제에 실패했습니다.");
+        toast("error", data?.error?.message || "계정 삭제에 실패했습니다.");
         setShowDeleteModal(false);
       }
     } catch {
-      setError("계정 삭제 중 오류가 발생했습니다.");
+      toast("error", "계정 삭제 중 오류가 발생했습니다.");
       setShowDeleteModal(false);
     } finally {
       setIsDeleting(false);
@@ -159,12 +118,10 @@ export default function ProfilePage() {
   if (error) {
     return (
       <div className="space-y-4">
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-          <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
-        </div>
+        <ErrorBanner message={error} />
         <button
           onClick={() => window.location.reload()}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
         >
           다시 시도
         </button>
@@ -211,14 +168,8 @@ export default function ProfilePage() {
         </h2>
 
         {passwordError && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
-            {passwordError}
-          </div>
-        )}
-
-        {passwordSuccess && (
-          <div className="mb-4 rounded-md bg-green-50 p-3 text-sm text-green-600 dark:bg-green-900/20 dark:text-green-400">
-            비밀번호가 변경되었습니다.
+          <div className="mb-4">
+            <ErrorBanner message={passwordError} onClose={() => setPasswordError(null)} />
           </div>
         )}
 
@@ -226,57 +177,51 @@ export default function ProfilePage() {
           <div>
             <label
               htmlFor="currentPassword"
-              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
             >
               현재 비밀번호
             </label>
-            <input
+            <PasswordInput
               id="currentPassword"
-              type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
             />
           </div>
           <div>
             <label
               htmlFor="newPassword"
-              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
             >
               새 비밀번호
             </label>
-            <input
+            <PasswordInput
               id="newPassword"
-              type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
               placeholder="8자 이상 입력해주세요"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
             />
           </div>
           <div>
             <label
               htmlFor="newPasswordConfirm"
-              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
             >
               새 비밀번호 확인
             </label>
-            <input
+            <PasswordInput
               id="newPasswordConfirm"
-              type="password"
               value={newPasswordConfirm}
               onChange={(e) => setNewPasswordConfirm(e.target.value)}
               required
               placeholder="새 비밀번호를 다시 입력해주세요"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
             />
           </div>
           <button
             type="submit"
             disabled={isChangingPassword}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isChangingPassword ? "변경 중..." : "비밀번호 변경"}
           </button>
@@ -299,12 +244,40 @@ export default function ProfilePage() {
         </button>
       </div>
 
-      <DeleteAccountDialog
+      {/* 계정 삭제 다이얼로그 */}
+      <Dialog
         isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
-        onConfirm={handleDeleteAccount}
-        isLoading={isDeleting}
-      />
+        onClose={() => !isDeleting && setShowDeleteModal(false)}
+        closeOnBackdrop={!isDeleting}
+        labelId="delete-account-title"
+      >
+        <h3
+          id="delete-account-title"
+          className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100"
+        >
+          계정 삭제
+        </h3>
+        <p className="mb-5 text-sm text-gray-600 dark:text-gray-300">
+          계정을 삭제하면 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없습니다.
+          정말 삭제하시겠습니까?
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowDeleteModal(false)}
+            disabled={isDeleting}
+            className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+          >
+            취소
+          </button>
+          <button
+            onClick={handleDeleteAccount}
+            disabled={isDeleting}
+            className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+          >
+            {isDeleting ? "삭제 중..." : "삭제"}
+          </button>
+        </div>
+      </Dialog>
     </div>
   );
 }

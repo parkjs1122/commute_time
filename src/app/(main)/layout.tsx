@@ -4,11 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import SessionProvider from "@/components/SessionProvider";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 function NavBar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuHeight, setMenuHeight] = useState(0);
 
   const navItems = [
     { href: "/", label: "대시보드" },
@@ -22,6 +24,18 @@ function NavBar() {
     }
     return pathname.startsWith(href);
   }
+
+  // Calculate menu height for animation
+  useEffect(() => {
+    if (menuRef.current) {
+      setMenuHeight(mobileMenuOpen ? menuRef.current.scrollHeight : 0);
+    }
+  }, [mobileMenuOpen]);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   return (
     <nav className="border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
@@ -62,7 +76,8 @@ function NavBar() {
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 sm:hidden dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-            aria-label="메뉴 열기"
+            aria-label={mobileMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
+            aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? (
               <svg
@@ -96,9 +111,13 @@ function NavBar() {
           </button>
         </div>
 
-        {/* Mobile Navigation */}
-        {mobileMenuOpen && (
-          <div className="border-t border-gray-200 pb-3 pt-2 sm:hidden dark:border-gray-700">
+        {/* Mobile Navigation with slide animation */}
+        <div
+          ref={menuRef}
+          className="overflow-hidden transition-all duration-200 ease-in-out sm:hidden"
+          style={{ maxHeight: menuHeight }}
+        >
+          <div className="border-t border-gray-200 pb-3 pt-2 dark:border-gray-700">
             {navItems.map((item) => (
               <Link
                 key={item.href}
@@ -123,7 +142,7 @@ function NavBar() {
               로그아웃
             </button>
           </div>
-        )}
+        </div>
       </div>
     </nav>
   );

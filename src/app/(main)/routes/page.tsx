@@ -4,7 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import LegDetail from "@/components/LegDetail";
 import RouteSourceBadge from "@/components/RouteSourceBadge";
+import RouteTypeBadge from "@/components/RouteTypeBadge";
 import Spinner from "@/components/Spinner";
+import Dialog from "@/components/Dialog";
+import ErrorBanner from "@/components/ErrorBanner";
+import { useToast } from "@/components/ToastProvider";
 
 interface RouteLegData {
   id: string;
@@ -30,20 +34,40 @@ interface SavedRouteData {
   legs: RouteLegData[];
 }
 
-const ROUTE_TYPE_BADGE: Record<string, { label: string; className: string }> = {
-  commute: {
-    label: "출근",
-    className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  },
-  return: {
-    label: "퇴근",
-    className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
-  },
-  other: {
-    label: "기타",
-    className: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400",
-  },
-};
+const ROUTE_TYPE_OPTIONS = [
+  { value: "commute", label: "출근" },
+  { value: "return", label: "퇴근" },
+  { value: "other", label: "기타" },
+] as const;
+
+/**
+ * 경로 타입 선택 (세그먼트 버튼)
+ */
+function RouteTypeSelector({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-600">
+      {ROUTE_TYPE_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          onClick={() => onChange(option.value)}
+          className={`px-2.5 py-1.5 text-xs font-medium transition-colors first:rounded-l-lg last:rounded-r-lg ${
+            value === option.value
+              ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+              : "text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-700"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /**
  * 저장된 경로 카드 컴포넌트
@@ -53,12 +77,14 @@ function RouteCard({
   onEditAlias,
   onDelete,
   onChangeRouteType,
+  onSetDefault,
   onError,
 }: {
   route: SavedRouteData;
   onEditAlias: (id: string, currentAlias: string) => void;
   onDelete: (id: string, alias: string) => void;
   onChangeRouteType: (id: string, routeType: string) => void;
+  onSetDefault: (id: string) => void;
   onError: (message: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -104,8 +130,12 @@ function RouteCard({
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      {/* 헤더: 별칭 + 기본 경로 뱃지 */}
+    <div className={`rounded-lg border bg-white p-4 shadow-sm dark:bg-gray-800 ${
+      route.isDefault
+        ? "border-blue-200 ring-1 ring-blue-100 dark:border-blue-700 dark:ring-blue-900/30"
+        : "border-gray-200 dark:border-gray-700"
+    }`}>
+      {/* 헤더: 별칭 + 뱃지 */}
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           {isEditing ? (
@@ -117,23 +147,26 @@ function RouteCard({
                 onKeyDown={handleKeyDown}
                 onBlur={handleSaveAlias}
                 disabled={isSaving}
-                className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                 autoFocus
               />
             </div>
           ) : (
-            <h3 className="truncate text-base font-semibold text-gray-900 dark:text-gray-100">
-              {route.alias}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-base font-semibold text-gray-900 dark:text-gray-100">
+                {route.alias}
+              </h3>
+              {route.isDefault && (
+                <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                  대표
+                </span>
+              )}
+            </div>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <RouteSourceBadge routeSource={route.routeSource} />
-          {ROUTE_TYPE_BADGE[route.routeType] && (
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${ROUTE_TYPE_BADGE[route.routeType].className}`}>
-              {ROUTE_TYPE_BADGE[route.routeType].label}
-            </span>
-          )}
+          <RouteTypeBadge routeType={route.routeType} />
         </div>
       </div>
 
@@ -160,29 +193,32 @@ function RouteCard({
         <LegDetail legs={route.legs} />
       </div>
 
-      {/* 액션 버튼 */}
-      <div className="flex items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+      {/* 액션 영역 */}
+      <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
         <button
           onClick={() => {
             setIsEditing(true);
             setEditAlias(route.alias);
           }}
-          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+          className="rounded-lg px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
         >
           이름 수정
         </button>
-        <select
+        <RouteTypeSelector
           value={route.routeType}
-          onChange={(e) => onChangeRouteType(route.id, e.target.value)}
-          className="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300"
-        >
-          <option value="commute">출근</option>
-          <option value="return">퇴근</option>
-          <option value="other">기타</option>
-        </select>
+          onChange={(type) => onChangeRouteType(route.id, type)}
+        />
+        {!route.isDefault && (
+          <button
+            onClick={() => onSetDefault(route.id)}
+            className="rounded-lg px-3 py-2 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
+          >
+            대표 설정
+          </button>
+        )}
         <button
           onClick={() => onDelete(route.id, route.alias)}
-          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+          className="rounded-lg px-3 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
         >
           삭제
         </button>
@@ -191,56 +227,8 @@ function RouteCard({
   );
 }
 
-/**
- * 삭제 확인 다이얼로그
- */
-function DeleteConfirmDialog({
-  isOpen,
-  alias,
-  onClose,
-  onConfirm,
-  isLoading,
-}: {
-  isOpen: boolean;
-  alias: string;
-  onClose: () => void;
-  onConfirm: () => void;
-  isLoading: boolean;
-}) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-gray-800">
-        <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
-          경로 삭제
-        </h3>
-        <p className="mb-5 text-sm text-gray-600 dark:text-gray-300">
-          &quot;{alias}&quot; 경로를 삭제하시겠습니까? 이 작업은 되돌릴 수
-          없습니다.
-        </p>
-        <div className="flex gap-2">
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-          >
-            취소
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isLoading}
-            className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
-          >
-            {isLoading ? "삭제 중..." : "삭제"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function RoutesPage() {
+  const { toast } = useToast();
   const [routes, setRoutes] = useState<SavedRouteData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -284,6 +272,7 @@ export default function RoutesPage() {
     setRoutes((prev) =>
       prev.map((r) => (r.id === id ? { ...r, alias: newAlias } : r))
     );
+    toast("success", "경로 이름이 변경되었습니다.");
   }
 
   function handleDeleteClick(id: string, alias: string) {
@@ -304,6 +293,7 @@ export default function RoutesPage() {
           prev.filter((r) => r.id !== deleteTarget.id)
         );
         setDeleteTarget(null);
+        toast("success", "경로가 삭제되었습니다.");
       } else {
         const data = await response.json();
         setActionError(data?.error?.message || "삭제에 실패했습니다.");
@@ -327,12 +317,36 @@ export default function RoutesPage() {
         setRoutes((prev) =>
           prev.map((r) => (r.id === id ? { ...r, routeType } : r))
         );
+        toast("success", "경로 타입이 변경되었습니다.");
       } else {
         const data = await response.json();
-        setActionError(data?.error?.message || "경로 타입 변경에 실패했습니다.");
+        toast("error", data?.error?.message || "경로 타입 변경에 실패했습니다.");
       }
     } catch {
-      setActionError("경로 타입 변경 중 오류가 발생했습니다.");
+      toast("error", "경로 타입 변경 중 오류가 발생했습니다.");
+    }
+  }
+
+  async function handleSetDefault(id: string) {
+    try {
+      const response = await fetch(`/api/routes/${id}/default`, {
+        method: "PATCH",
+      });
+
+      if (response.ok) {
+        setRoutes((prev) =>
+          prev.map((r) => ({
+            ...r,
+            isDefault: r.id === id,
+          }))
+        );
+        toast("success", "대시보드 대표 경로가 변경되었습니다.");
+      } else {
+        const data = await response.json();
+        toast("error", data?.error?.message || "대표 경로 설정에 실패했습니다.");
+      }
+    } catch {
+      toast("error", "대표 경로 설정 중 오류가 발생했습니다.");
     }
   }
 
@@ -347,12 +361,10 @@ export default function RoutesPage() {
   if (error) {
     return (
       <div className="space-y-4">
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-          <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
-        </div>
+        <ErrorBanner message={error} />
         <button
           onClick={fetchRoutes}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
         >
           다시 시도
         </button>
@@ -375,7 +387,7 @@ export default function RoutesPage() {
         {routes.length < 5 && (
           <Link
             href="/routes/new"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
           >
             <svg
               className="h-4 w-4"
@@ -397,19 +409,10 @@ export default function RoutesPage() {
 
       {/* 액션 에러 */}
       {actionError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-red-700 dark:text-red-400">
-              {actionError}
-            </p>
-            <button
-              onClick={() => setActionError(null)}
-              className="ml-4 text-sm font-medium text-red-700 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-            >
-              닫기
-            </button>
-          </div>
-        </div>
+        <ErrorBanner
+          message={actionError}
+          onClose={() => setActionError(null)}
+        />
       )}
 
       {/* 경로 목록 */}
@@ -422,25 +425,28 @@ export default function RoutesPage() {
               onEditAlias={handleEditAlias}
               onDelete={handleDeleteClick}
               onChangeRouteType={handleChangeRouteType}
+              onSetDefault={handleSetDefault}
               onError={setActionError}
             />
           ))}
         </div>
       ) : (
         <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white p-12 text-center dark:border-gray-700 dark:bg-gray-800">
-          <svg
-            className="mx-auto h-12 w-12 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z"
-            />
-          </svg>
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
+            <svg
+              className="h-8 w-8 text-gray-400 dark:text-gray-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z"
+              />
+            </svg>
+          </div>
           <h3 className="mt-4 text-base font-semibold text-gray-900 dark:text-gray-100">
             저장된 경로가 없습니다
           </h3>
@@ -470,13 +476,39 @@ export default function RoutesPage() {
       )}
 
       {/* 삭제 확인 다이얼로그 */}
-      <DeleteConfirmDialog
+      <Dialog
         isOpen={deleteTarget !== null}
-        alias={deleteTarget?.alias || ""}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDeleteConfirm}
-        isLoading={isDeleting}
-      />
+        onClose={() => !isDeleting && setDeleteTarget(null)}
+        closeOnBackdrop={!isDeleting}
+        labelId="delete-dialog-title"
+      >
+        <h3
+          id="delete-dialog-title"
+          className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100"
+        >
+          경로 삭제
+        </h3>
+        <p className="mb-5 text-sm text-gray-600 dark:text-gray-300">
+          &quot;{deleteTarget?.alias}&quot; 경로를 삭제하시겠습니까? 이 작업은
+          되돌릴 수 없습니다.
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setDeleteTarget(null)}
+            disabled={isDeleting}
+            className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+          >
+            취소
+          </button>
+          <button
+            onClick={handleDeleteConfirm}
+            disabled={isDeleting}
+            className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+          >
+            {isDeleting ? "삭제 중..." : "삭제"}
+          </button>
+        </div>
+      </Dialog>
     </div>
   );
 }

@@ -5,23 +5,10 @@ import Link from "next/link";
 import type { DashboardResponse, ETAResult } from "@/types";
 import TransportBadge from "@/components/TransportBadge";
 import RouteSourceBadge from "@/components/RouteSourceBadge";
+import RouteTypeBadge from "@/components/RouteTypeBadge";
 import Spinner from "@/components/Spinner";
+import ErrorBanner from "@/components/ErrorBanner";
 import { formatETATime, formatWaitTime, formatLastUpdated } from "@/lib/format-utils";
-
-const ROUTE_TYPE_BADGE: Record<string, { label: string; className: string }> = {
-  commute: {
-    label: "출근",
-    className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  },
-  return: {
-    label: "퇴근",
-    className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
-  },
-  other: {
-    label: "기타",
-    className: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400",
-  },
-};
 
 // ---------------------------------------------------------------------------
 // Group arrivals by leg (station pair), then by line within each leg
@@ -112,6 +99,61 @@ function groupByLeg(
 }
 
 // ---------------------------------------------------------------------------
+// Leg arrival detail (shared between primary and expanded additional cards)
+// ---------------------------------------------------------------------------
+
+function LegArrivalDetail({
+  legArrivals,
+  compact = false,
+}: {
+  legArrivals: ETAResult["legArrivals"];
+  compact?: boolean;
+}) {
+  return (
+    <div className={compact ? "space-y-1.5" : "space-y-3"}>
+      {groupByLeg(legArrivals).map((leg, legIdx) => (
+        <div key={legIdx}>
+          {(leg.startStation || leg.endStation) && (
+            <div
+              className={`flex items-center gap-1.5 font-medium text-gray-500 dark:text-gray-400 ${
+                compact ? "mb-1 text-[11px]" : "mb-1.5 text-xs"
+              }`}
+            >
+              {!compact && (
+                <svg
+                  className="h-3.5 w-3.5 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 0 1 15 0Z" />
+                </svg>
+              )}
+              <span>
+                {leg.startStation ?? "출발"} &rarr;{" "}
+                {leg.endStation ?? "도착"}
+              </span>
+            </div>
+          )}
+          <div className={`space-y-${compact ? "0.5" : "1.5"} ${compact ? "" : "pl-1"}`}>
+            {leg.lines.map((line, lineIdx) => (
+              <div key={lineIdx} className={`flex flex-wrap items-center gap-${compact ? "1.5" : "2"}`}>
+                <TransportBadge type={line.type} lineName={line.lineName} />
+                <span className={`${compact ? "text-xs" : "text-sm"} text-gray-${compact ? "500" : "600"} dark:text-gray-${compact ? "400" : "300"}`}>
+                  {formatGroupedMessages(line.messages)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Off-hours state
 // ---------------------------------------------------------------------------
 
@@ -148,19 +190,21 @@ function OffHoursCard() {
 function EmptyState() {
   return (
     <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white p-12 text-center dark:border-gray-700 dark:bg-gray-800">
-      <svg
-        className="mx-auto h-12 w-12 text-gray-400"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z"
-        />
-      </svg>
+      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
+        <svg
+          className="h-8 w-8 text-gray-400 dark:text-gray-500"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={1.5}
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z"
+          />
+        </svg>
+      </div>
       <h2 className="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
         저장된 경로가 없습니다
       </h2>
@@ -219,11 +263,7 @@ function PrimaryETACard({ route }: { route: ETAResult }) {
             {route.routeAlias}
           </h2>
           <RouteSourceBadge routeSource={route.routeSource} />
-          {ROUTE_TYPE_BADGE[route.routeType] && (
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ROUTE_TYPE_BADGE[route.routeType].className}`}>
-              {ROUTE_TYPE_BADGE[route.routeType].label}
-            </span>
-          )}
+          <RouteTypeBadge routeType={route.routeType} />
           {route.isEstimate && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
               추정치
@@ -236,39 +276,8 @@ function PrimaryETACard({ route }: { route: ETAResult }) {
         </p>
 
         {route.legArrivals.length > 0 && (
-          <div className="mt-5 space-y-3">
-            {groupByLeg(route.legArrivals).map((leg, legIdx) => (
-              <div key={legIdx}>
-                {(leg.startStation || leg.endStation) && (
-                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
-                    <svg
-                      className="h-3.5 w-3.5 shrink-0"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 0 1 15 0Z" />
-                    </svg>
-                    <span>
-                      {leg.startStation ?? "출발"} &rarr;{" "}
-                      {leg.endStation ?? "도착"}
-                    </span>
-                  </div>
-                )}
-                <div className="space-y-1.5 pl-1">
-                  {leg.lines.map((line, lineIdx) => (
-                    <div key={lineIdx} className="flex flex-wrap items-center gap-2">
-                      <TransportBadge type={line.type} lineName={line.lineName} />
-                      <span className="text-sm text-gray-600 dark:text-gray-300">
-                        {formatGroupedMessages(line.messages)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div className="mt-5">
+            <LegArrivalDetail legArrivals={route.legArrivals} />
           </div>
         )}
 
@@ -292,79 +301,100 @@ function PrimaryETACard({ route }: { route: ETAResult }) {
 }
 
 // ---------------------------------------------------------------------------
-// Additional route card (compact)
+// Additional route card (compact, expandable)
 // ---------------------------------------------------------------------------
 
 function AdditionalRouteCard({ route }: { route: ETAResult }) {
   const isOff = !route.estimatedArrival;
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <div
-      className={`rounded-lg border bg-white p-4 shadow-sm dark:bg-gray-800 ${
+      className={`rounded-lg border bg-white shadow-sm transition-shadow dark:bg-gray-800 ${
         route.isEstimate
           ? "border-amber-200 dark:border-amber-700"
           : "border-gray-200 dark:border-gray-700"
-      }`}
+      } ${!isOff ? "cursor-pointer hover:shadow-md" : ""}`}
+      onClick={() => !isOff && setExpanded(!expanded)}
+      role={!isOff ? "button" : undefined}
+      tabIndex={!isOff ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (!isOff && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          setExpanded(!expanded);
+        }
+      }}
+      aria-expanded={!isOff ? expanded : undefined}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {route.routeAlias}
-            </h3>
-            <RouteSourceBadge routeSource={route.routeSource} />
-            {ROUTE_TYPE_BADGE[route.routeType] && (
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${ROUTE_TYPE_BADGE[route.routeType].className}`}>
-                {ROUTE_TYPE_BADGE[route.routeType].label}
-              </span>
-            )}
-            {route.isEstimate && (
-              <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                추정치
-              </span>
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {route.routeAlias}
+              </h3>
+              <RouteSourceBadge routeSource={route.routeSource} />
+              <RouteTypeBadge routeType={route.routeType} />
+              {route.isEstimate && (
+                <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                  추정치
+                </span>
+              )}
+            </div>
+
+            {!isOff && !expanded && (
+              <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                총 {route.travelTime}분 / 대기 {formatWaitTime(route.waitTime)}
+              </p>
             )}
           </div>
 
-          {route.legArrivals.length > 0 && !isOff && (
-            <div className="mt-1.5 space-y-1.5">
-              {groupByLeg(route.legArrivals).map((leg, legIdx) => (
-                <div key={legIdx}>
-                  {(leg.startStation || leg.endStation) && (
-                    <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                      {leg.startStation ?? "출발"} &rarr; {leg.endStation ?? "도착"}
-                    </p>
-                  )}
-                  <div className="space-y-0.5">
-                    {leg.lines.map((line, lineIdx) => (
-                      <div key={lineIdx} className="flex flex-wrap items-center gap-1.5">
-                        <TransportBadge type={line.type} lineName={line.lineName} />
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          {formatGroupedMessages(line.messages)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+          <div className="flex shrink-0 items-center gap-2">
+            {isOff ? (
+              <span className="text-sm text-gray-400 dark:text-gray-500">운행 종료</span>
+            ) : (
+              <p className="text-lg font-bold text-gray-900 dark:text-gray-50">
+                {formatETATime(route.estimatedArrival)}
+              </p>
+            )}
+            {!isOff && (
+              <svg
+                className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${
+                  expanded ? "rotate-180" : ""
+                }`}
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+              </svg>
+            )}
+          </div>
+        </div>
+
+        {/* Expanded detail */}
+        {expanded && !isOff && (
+          <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-700">
+            {route.legArrivals.length > 0 && (
+              <LegArrivalDetail legArrivals={route.legArrivals} compact />
+            )}
+            <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+              <span className="flex items-center gap-1">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                총 {route.travelTime}분
+              </span>
+              <span className="flex items-center gap-1">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                </svg>
+                대기 {formatWaitTime(route.waitTime)}
+              </span>
             </div>
-          )}
-
-          {!isOff && (
-            <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-              총 {route.travelTime}분 / 대기 {formatWaitTime(route.waitTime)}
-            </p>
-          )}
-        </div>
-
-        <div className="shrink-0 text-right">
-          {isOff ? (
-            <span className="text-sm text-gray-400 dark:text-gray-500">운행 종료</span>
-          ) : (
-            <p className="text-lg font-bold text-gray-900 dark:text-gray-50">
-              {formatETATime(route.estimatedArrival)}
-            </p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -492,12 +522,10 @@ export default function DashboardPage() {
   if (error) {
     return (
       <div className="space-y-4">
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-          <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
-        </div>
+        <ErrorBanner message={error} />
         <button
           onClick={() => fetchDashboard()}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
         >
           다시 시도
         </button>
