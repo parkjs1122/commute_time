@@ -8,6 +8,21 @@ import RouteSourceBadge from "@/components/RouteSourceBadge";
 import Spinner from "@/components/Spinner";
 import { formatETATime, formatWaitTime, formatLastUpdated } from "@/lib/format-utils";
 
+const ROUTE_TYPE_BADGE: Record<string, { label: string; className: string }> = {
+  commute: {
+    label: "출근",
+    className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  },
+  return: {
+    label: "퇴근",
+    className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
+  },
+  other: {
+    label: "기타",
+    className: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400",
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Group arrivals by leg (station pair), then by line within each leg
 // ---------------------------------------------------------------------------
@@ -204,6 +219,11 @@ function PrimaryETACard({ route }: { route: ETAResult }) {
             {route.routeAlias}
           </h2>
           <RouteSourceBadge routeSource={route.routeSource} />
+          {ROUTE_TYPE_BADGE[route.routeType] && (
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ROUTE_TYPE_BADGE[route.routeType].className}`}>
+              {ROUTE_TYPE_BADGE[route.routeType].label}
+            </span>
+          )}
           {route.isEstimate && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
               추정치
@@ -293,6 +313,11 @@ function AdditionalRouteCard({ route }: { route: ETAResult }) {
               {route.routeAlias}
             </h3>
             <RouteSourceBadge routeSource={route.routeSource} />
+            {ROUTE_TYPE_BADGE[route.routeType] && (
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${ROUTE_TYPE_BADGE[route.routeType].className}`}>
+                {ROUTE_TYPE_BADGE[route.routeType].label}
+              </span>
+            )}
             {route.isEstimate && (
               <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                 추정치
