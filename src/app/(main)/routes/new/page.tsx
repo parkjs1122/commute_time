@@ -325,7 +325,7 @@ function ReverseRouteSelectDialog({
   destName,
   routes,
   isSearching,
-  isSaving,
+  savingIndex,
   reverseAlias,
   onAliasChange,
   onSave,
@@ -338,10 +338,10 @@ function ReverseRouteSelectDialog({
   destName: string;
   routes: TransitRoute[];
   isSearching: boolean;
-  isSaving: boolean;
+  savingIndex: number | null;
   reverseAlias: string;
   onAliasChange: (alias: string) => void;
-  onSave: (route: TransitRoute) => void;
+  onSave: (route: TransitRoute, index: number) => void;
   onSkip: () => void;
   error: string | null;
 }) {
@@ -397,8 +397,12 @@ function ReverseRouteSelectDialog({
                   key={index}
                   route={route}
                   index={index}
-                  onSave={onSave}
-                  saveLabel={isSaving ? "저장 중..." : "이 경로 저장"}
+                  onSave={(r) => onSave(r, index)}
+                  saveLabel={
+                    savingIndex === index
+                      ? "저장 중..."
+                      : "이 경로 저장"
+                  }
                 />
               ))}
             </div>
@@ -417,7 +421,7 @@ function ReverseRouteSelectDialog({
           <button
             type="button"
             onClick={onSkip}
-            disabled={isSaving}
+            disabled={savingIndex !== null}
             className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             건너뛰기
@@ -451,7 +455,7 @@ export default function NewRoutePage() {
   const [showReverseSelect, setShowReverseSelect] = useState(false);
   const [reverseRoutes, setReverseRoutes] = useState<TransitRoute[]>([]);
   const [isReverseSearching, setIsReverseSearching] = useState(false);
-  const [isReverseSaving, setIsReverseSaving] = useState(false);
+  const [reverseSavingIndex, setReverseSavingIndex] = useState<number | null>(null);
   const [reverseAlias, setReverseAlias] = useState("");
   const [reverseError, setReverseError] = useState<string | null>(null);
   const [savedRouteType, setSavedRouteType] = useState<RouteType | null>(null);
@@ -656,11 +660,11 @@ export default function NewRoutePage() {
   }
 
   // 역방향 경로 저장
-  async function handleReverseSave(route: TransitRoute) {
+  async function handleReverseSave(route: TransitRoute, index: number) {
     if (!origin || !destination || !reverseAlias.trim() || !savedRouteType)
       return;
 
-    setIsReverseSaving(true);
+    setReverseSavingIndex(index);
     setReverseError(null);
 
     const reverseType: RouteType =
@@ -695,7 +699,7 @@ export default function NewRoutePage() {
           ? error.message
           : "역방향 경로 저장 중 오류가 발생했습니다."
       );
-      setIsReverseSaving(false);
+      setReverseSavingIndex(null);
     }
   }
 
@@ -816,7 +820,7 @@ export default function NewRoutePage() {
         destName={destination?.name ?? ""}
         routes={reverseRoutes}
         isSearching={isReverseSearching}
-        isSaving={isReverseSaving}
+        savingIndex={reverseSavingIndex}
         reverseAlias={reverseAlias}
         onAliasChange={setReverseAlias}
         onSave={handleReverseSave}
