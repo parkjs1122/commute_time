@@ -31,6 +31,7 @@ export interface TransitRoute {
   legs: RouteLeg[];
   departureTime?: string;
   arrivalTime?: string;
+  routeSource?: "in_local" | "inter_local";
 }
 
 // 실시간 도착 정보
@@ -69,6 +70,7 @@ export interface ETAResult {
   routeId: string;
   routeAlias: string;
   routeType: RouteType;
+  routeSource?: "in_local" | "inter_local";
   legArrivals: LegArrivalInfo[];
 }
 

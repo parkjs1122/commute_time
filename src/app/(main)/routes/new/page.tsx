@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import PlaceSearchInput from "@/components/PlaceSearchInput";
 import LegDetail from "@/components/LegDetail";
+import RouteSourceBadge from "@/components/RouteSourceBadge";
 import Spinner from "@/components/Spinner";
 import type { Place, TransitRoute, SaveRouteRequest, RouteType } from "@/types";
 
@@ -41,9 +42,12 @@ function RouteResultCard({
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-          경로 {index + 1}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            경로 {index + 1}
+          </span>
+          <RouteSourceBadge routeSource={route.routeSource} />
+        </div>
         <button
           onClick={() => onSave(route)}
           className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"

@@ -51,6 +51,7 @@ export const RouteService = {
       totalTime: data.route.totalTime,
       transferCount: data.route.transferCount,
       fare: data.route.fare ?? null,
+      routeSource: data.route.routeSource ?? null,
       legs: {
         create: data.route.legs.map((leg, index) => ({
           order: index,

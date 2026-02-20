@@ -49,7 +49,7 @@ function validateBody(
  * 소수점 6자리까지 반올림하여 일관성을 유지합니다.
  * 파서 로직 변경 시 CACHE_VERSION을 올려 기존 캐시를 무효화합니다.
  */
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 
 function toCacheKey(lat: number, lng: number): string {
   return `${CACHE_VERSION}:${lat.toFixed(6)},${lng.toFixed(6)}`;

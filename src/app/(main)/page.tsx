@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import type { DashboardResponse, ETAResult } from "@/types";
 import TransportBadge from "@/components/TransportBadge";
+import RouteSourceBadge from "@/components/RouteSourceBadge";
 import Spinner from "@/components/Spinner";
 import { formatETATime, formatWaitTime, formatLastUpdated } from "@/lib/format-utils";
 
@@ -202,6 +203,7 @@ function PrimaryETACard({ route }: { route: ETAResult }) {
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
             {route.routeAlias}
           </h2>
+          <RouteSourceBadge routeSource={route.routeSource} />
           {route.isEstimate && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
               추정치
@@ -290,6 +292,7 @@ function AdditionalRouteCard({ route }: { route: ETAResult }) {
             <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
               {route.routeAlias}
             </h3>
+            <RouteSourceBadge routeSource={route.routeSource} />
             {route.isEstimate && (
               <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                 추정치

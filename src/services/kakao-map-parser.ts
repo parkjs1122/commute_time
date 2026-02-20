@@ -14,14 +14,45 @@ interface KakaoRouteResponse {
   in_local?: {
     routes: KakaoRoute[];
   };
+  inter_local_status?: string;
+  inter_local?: {
+    routes: KakaoInterLocalRoute[];
+  };
 }
 
+/** 시내(in_local) 경로 */
 interface KakaoRoute {
-  time: { value: number };
-  walkingTime: { value: number };
+  time: { value: number }; // 초
+  walkingTime?: { value: number }; // 초
   transfers: number;
-  fare: { value: number };
+  fare?: { value?: number; minValue?: number; maxValue?: number };
   steps: KakaoStep[];
+}
+
+/** 시외(inter_local) 경로 */
+interface KakaoInterLocalRoute {
+  totalTime: { value: number }; // 분
+  time: { value: number }; // 분 (열차 구간)
+  fare?: { value: number };
+  transfers: number;
+  vehicles?: string; // e.g. "KTX"
+  vehicle?: string;
+  sectionRoutes: KakaoSectionRoute[];
+}
+
+/** 시외 경로의 구간 */
+interface KakaoSectionRoute {
+  time: { value: number }; // 초
+  fare?: { value: number } | null;
+  vehicle: { type: string; subType?: string | null };
+  departure: { id?: string | null; type: string; name: string; x: number; y: number };
+  arrival: { id?: string | null; type: string; name: string; x: number; y: number };
+  transferRoute?: {
+    route: {
+      walkingTime?: { value: number };
+      steps: KakaoStep[];
+    };
+  } | null;
 }
 
 interface KakaoStep {
@@ -236,20 +267,29 @@ export class KakaoMapParser {
 
       const data: KakaoRouteResponse = await response.json();
 
-      if (data.in_local_status !== "SUCCESS" || !data.in_local?.routes) {
-        console.warn(
-          `[KakaoMapParser] 경로 결과 없음: ${origin.name} -> ${destination.name}`
-        );
-        return [];
-      }
+      // 시내(in_local) 경로 파싱
+      const inLocalRoutes: TransitRoute[] =
+        data.in_local_status === "SUCCESS" && data.in_local?.routes
+          ? data.in_local.routes
+              .map((route) => this.mapRoute(route, "in_local"))
+              .filter((r): r is TransitRoute => r !== null)
+          : [];
 
-      const routes = data.in_local.routes
-        .map((route) => this.mapRoute(route))
-        .filter((r): r is TransitRoute => r !== null);
+      // 시외(inter_local) 경로 파싱
+      const interLocalRoutes: TransitRoute[] =
+        data.inter_local_status === "SUCCESS" && data.inter_local?.routes
+          ? data.inter_local.routes
+              .map((route) => this.mapInterLocalRoute(route))
+              .filter((r): r is TransitRoute => r !== null)
+          : [];
+
+      const routes = [...inLocalRoutes, ...interLocalRoutes].sort(
+        (a, b) => a.totalTime - b.totalTime
+      );
 
       if (routes.length === 0) {
         console.warn(
-          `[KakaoMapParser] 경로를 변환할 수 없습니다: ${origin.name} -> ${destination.name}`
+          `[KakaoMapParser] 경로 결과 없음: ${origin.name} -> ${destination.name}`
         );
       }
 
@@ -268,7 +308,10 @@ export class KakaoMapParser {
   /**
    * 카카오 API 경로 응답을 TransitRoute로 변환합니다.
    */
-  private mapRoute(route: KakaoRoute): TransitRoute | null {
+  private mapRoute(
+    route: KakaoRoute,
+    routeSource: "in_local" | "inter_local"
+  ): TransitRoute | null {
     try {
       const totalTime = Math.round(route.time.value / 60);
       if (totalTime <= 0) return null;
@@ -278,11 +321,76 @@ export class KakaoMapParser {
       return {
         totalTime,
         transferCount: route.transfers,
-        walkTime: Math.round(route.walkingTime.value / 60),
-        fare: route.fare.value,
+        walkTime: Math.round((route.walkingTime?.value ?? 0) / 60),
+        fare: route.fare?.value ?? route.fare?.minValue,
         legs,
+        routeSource,
       };
-    } catch {
+    } catch (err) {
+      console.error(`[KakaoMapParser] mapRoute 오류 (${routeSource}):`, err);
+      return null;
+    }
+  }
+
+  /**
+   * 시외(inter_local) 경로를 TransitRoute로 변환합니다.
+   *
+   * inter_local 경로는 sectionRoutes 배열로 구성되며,
+   * 각 구간은 열차(TRAIN) 또는 환승 대중교통(TRANSFER_PUBLICTRAFFIC)입니다.
+   */
+  private mapInterLocalRoute(
+    route: KakaoInterLocalRoute
+  ): TransitRoute | null {
+    try {
+      const totalTime = route.totalTime.value; // 이미 분 단위
+      if (totalTime <= 0) return null;
+
+      const legs: RouteLeg[] = [];
+      let totalWalkTime = 0;
+
+      for (const section of route.sectionRoutes) {
+        if (
+          section.vehicle.type === "TRANSFER_PUBLICTRAFFIC" &&
+          section.transferRoute?.route
+        ) {
+          // 환승 구간: 시내 대중교통 (버스/지하철)
+          const sectionLegs = this.mapLegs(
+            section.transferRoute.route.steps
+          );
+          legs.push(...sectionLegs);
+          totalWalkTime += Math.round(
+            (section.transferRoute.route.walkingTime?.value ?? 0) / 60
+          );
+        } else if (
+          section.vehicle.type === "TRAIN" ||
+          section.vehicle.type === "EXPRESS_BUS" ||
+          section.vehicle.type === "INTERCITY_BUS"
+        ) {
+          // 열차/시외버스 구간
+          const lineName =
+            section.vehicle.subType ??
+            route.vehicles ??
+            section.vehicle.type;
+          legs.push({
+            type: "bus",
+            lineNames: [lineName],
+            startStation: section.departure.name,
+            endStation: section.arrival.name,
+            sectionTime: Math.round(section.time.value / 60),
+          });
+        }
+      }
+
+      return {
+        totalTime,
+        transferCount: route.transfers,
+        walkTime: totalWalkTime,
+        fare: route.fare?.value,
+        legs,
+        routeSource: "inter_local",
+      };
+    } catch (err) {
+      console.error("[KakaoMapParser] mapInterLocalRoute 오류:", err);
       return null;
     }
   }

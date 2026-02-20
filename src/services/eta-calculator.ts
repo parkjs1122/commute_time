@@ -43,6 +43,7 @@ export class ETACalculator {
         routeId: route.id,
         routeAlias: route.alias,
         routeType: route.routeType as RouteType,
+        routeSource: (route.routeSource as "in_local" | "inter_local") ?? undefined,
         legArrivals: [],
       };
     }
@@ -123,6 +124,7 @@ export class ETACalculator {
       routeId: route.id,
       routeAlias: route.alias,
       routeType: route.routeType as RouteType,
+      routeSource: (route.routeSource as "in_local" | "inter_local") ?? undefined,
       legArrivals,
     };
   }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import LegDetail from "@/components/LegDetail";
+import RouteSourceBadge from "@/components/RouteSourceBadge";
 import Spinner from "@/components/Spinner";
 
 interface RouteLegData {
@@ -20,6 +21,7 @@ interface SavedRouteData {
   alias: string;
   isDefault: boolean;
   routeType: string;
+  routeSource: string | null;
   originName: string;
   destName: string;
   totalTime: number;
@@ -125,11 +127,14 @@ function RouteCard({
             </h3>
           )}
         </div>
-        {ROUTE_TYPE_BADGE[route.routeType] && (
-          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${ROUTE_TYPE_BADGE[route.routeType].className}`}>
-            {ROUTE_TYPE_BADGE[route.routeType].label}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <RouteSourceBadge routeSource={route.routeSource} />
+          {ROUTE_TYPE_BADGE[route.routeType] && (
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${ROUTE_TYPE_BADGE[route.routeType].className}`}>
+              {ROUTE_TYPE_BADGE[route.routeType].label}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 출발지 -> 목적지 */}

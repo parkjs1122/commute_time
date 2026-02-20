@@ -41,6 +41,7 @@ model SavedRoute {
   totalTime     Int        // 총 소요 시간 (분)
   transferCount Int        // 환승 횟수
   fare          Int?       // 예상 요금 (원)
+  routeSource   String?    // "in_local" | "inter_local" (시내/시외 구분)
 
   legs          RouteLeg[]
   createdAt     DateTime   @default(now())
