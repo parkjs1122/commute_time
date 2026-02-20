@@ -65,8 +65,22 @@ model RouteLeg {
   stationCount   Int?       // 정차 역 수
   sectionTime    Int        // 구간 소요 시간 (분)
   distance       Int?       // 구간 거리 (미터)
+  legSubType     String?    // "intercity_bus" | "express_bus" (시외/고속버스 구분)
 
   @@index([savedRouteId])
+}
+
+model BusTerminal {
+  id          String   @id @default(cuid())
+  terminalId  String   @unique    // API terminalId (예: "NAI0511601")
+  terminalNm  String              // 터미널 이름 (예: "동서울")
+  cityCode    String              // 도시 코드 (예: "11")
+  cityName    String              // 도시명 (예: "서울특별시")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([cityCode])
+  @@index([terminalNm])
 }
 
 model RouteCache {

@@ -23,6 +23,7 @@ type GroupedLine = {
   type: "bus" | "subway";
   lineName: string;
   messages: GroupedMessage[];
+  isSchedule?: boolean;
 };
 
 type GroupedLeg = {
@@ -55,6 +56,7 @@ function groupByLeg(
     startStation?: string;
     endStation?: string;
     destination?: string;
+    isSchedule?: boolean;
   }[]
 ): GroupedLeg[] {
   const legs: GroupedLeg[] = [];
@@ -91,6 +93,7 @@ function groupByLeg(
         type: arrival.type,
         lineName: arrival.lineName,
         messages: [message],
+        isSchedule: arrival.isSchedule,
       });
     }
   }
@@ -140,7 +143,7 @@ function LegArrivalDetail({
           <div className={compact ? "space-y-1" : "space-y-1.5 pl-1"}>
             {leg.lines.map((line, lineIdx) => (
               <div key={lineIdx} className={compact ? "flex flex-wrap items-center gap-2" : "flex flex-wrap items-center gap-2"}>
-                <TransportBadge type={line.type} lineName={line.lineName} />
+                <TransportBadge type={line.type} lineName={line.lineName} isSchedule={line.isSchedule} />
                 <span className={compact ? "text-xs text-gray-500 dark:text-gray-400" : "text-sm text-gray-600 dark:text-gray-300"}>
                   {formatGroupedMessages(line.messages)}
                 </span>

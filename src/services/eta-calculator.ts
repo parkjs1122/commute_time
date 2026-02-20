@@ -1,4 +1,5 @@
 import { RealtimeTransitService } from "@/services/realtime-transit";
+import { IntercityBusService } from "@/services/intercity-bus-service";
 import { RouteService } from "@/services/route-service";
 import type { ETAResult, LegArrivalInfo, DashboardResponse, SavedRouteWithLegs, RouteType } from "@/types";
 import { isOffHours } from "@/lib/time-utils";
@@ -10,6 +11,29 @@ const AVERAGE_HEADWAY = {
 } as const;
 
 /**
+ * Leg이 시외/고속버스 구간인지 판별합니다.
+ * legSubType이 설정된 경우 우선, 아닌 경우 런타임 휴리스틱 적용.
+ */
+function isIntercityBusLeg(
+  leg: { type: string; legSubType?: string | null; startStationId?: string | null },
+  routeSource?: string | null
+): boolean {
+  // 명시적으로 설정된 경우
+  if (leg.legSubType === "intercity_bus" || leg.legSubType === "express_bus") {
+    return true;
+  }
+  // 하위호환: legSubType 없는 기존 시외 경로 감지
+  if (
+    routeSource === "inter_local" &&
+    leg.type === "bus" &&
+    !leg.startStationId
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * ETA 계산 엔진
  *
  * 저장된 경로에 대해 실시간 도착 정보를 조회하고,
@@ -19,9 +43,11 @@ const AVERAGE_HEADWAY = {
  */
 export class ETACalculator {
   private realtimeService: RealtimeTransitService;
+  private intercityService: IntercityBusService;
 
   constructor() {
     this.realtimeService = new RealtimeTransitService();
+    this.intercityService = new IntercityBusService();
   }
 
   /**
@@ -48,59 +74,120 @@ export class ETACalculator {
       };
     }
 
-    // 모든 대중교통 구간의 실시간 도착 정보 조회
-    const allArrivals = await this.realtimeService.getAllTransitArrivals(
-      route.legs
-    );
-
-    let waitTime: number; // 초
-    let isEstimate: boolean;
-    let legArrivals: LegArrivalInfo[];
-
-    // route.legs 순서대로 도착 정보를 구성 (실시간 정보 유무와 관계없이 순서 유지)
+    // 대중교통 구간을 시내/시외로 분류
     const transitLegs = route.legs.filter(
       (leg) => leg.type === "bus" || leg.type === "subway"
     );
 
-    legArrivals = [];
-    for (const leg of transitLegs) {
-      const realtimeData = allArrivals.find(
-        (a) => a.startStation === (leg.startStation ?? undefined)
-      );
+    const cityLegs = transitLegs.filter(
+      (leg) => !isIntercityBusLeg(leg, route.routeSource)
+    );
+    const intercityLegs = transitLegs.filter((leg) =>
+      isIntercityBusLeg(leg, route.routeSource)
+    );
 
-      if (realtimeData && realtimeData.arrivals.length > 0) {
-        for (const a of realtimeData.arrivals) {
+    // 시내 실시간 + 시외 시간표를 병렬 조회
+    const [allArrivals, intercityResults] = await Promise.all([
+      cityLegs.length > 0
+        ? this.realtimeService.getAllTransitArrivals(cityLegs)
+        : Promise.resolve([]),
+      Promise.all(
+        intercityLegs.map(async (leg) => ({
+          leg,
+          departures: await this.intercityService.getUpcomingDepartures(
+            leg.startStation ?? "",
+            leg.endStation ?? "",
+            2
+          ),
+        }))
+      ),
+    ]);
+
+    // route.legs 순서대로 도착 정보를 구성
+    const legArrivals: LegArrivalInfo[] = [];
+
+    for (const leg of transitLegs) {
+      if (isIntercityBusLeg(leg, route.routeSource)) {
+        // 시외버스 구간: 시간표 기반
+        const result = intercityResults.find((r) => r.leg === leg);
+        if (result && result.departures.length > 0) {
+          for (const dep of result.departures) {
+            legArrivals.push({
+              type: "bus",
+              lineName: leg.lineNames[0] || "시외버스",
+              arrivalMessage: `${dep.departureTime} 출발 (${dep.waitMinutes}분 후)`,
+              arrivalTime: dep.waitMinutes * 60,
+              startStation: leg.startStation ?? undefined,
+              endStation: leg.endStation ?? undefined,
+              isSchedule: true,
+            });
+          }
+        } else {
           legArrivals.push({
-            type: realtimeData.type,
-            lineName: a.lineName,
-            arrivalMessage: a.arrivalMessage,
-            arrivalTime: a.arrivalTime,
-            startStation: realtimeData.startStation,
-            endStation: realtimeData.endStation,
-            destination: a.destination,
+            type: "bus",
+            lineName: leg.lineNames[0] || "시외버스",
+            arrivalMessage: "배차 정보 없음",
+            arrivalTime: AVERAGE_HEADWAY.bus,
+            startStation: leg.startStation ?? undefined,
+            endStation: leg.endStation ?? undefined,
+            isSchedule: true,
           });
         }
       } else {
-        for (const name of leg.lineNames) {
-          legArrivals.push({
-            type: leg.type as "bus" | "subway",
-            lineName: name,
-            arrivalMessage: "실시간 정보 없음",
-            arrivalTime:
-              AVERAGE_HEADWAY[leg.type as "bus" | "subway"] ??
-              AVERAGE_HEADWAY.bus,
-            startStation: leg.startStation ?? undefined,
-            endStation: leg.endStation ?? undefined,
-          });
+        // 시내 구간: 기존 실시간 도착 정보
+        const realtimeData = allArrivals.find(
+          (a) => a.startStation === (leg.startStation ?? undefined)
+        );
+
+        if (realtimeData && realtimeData.arrivals.length > 0) {
+          for (const a of realtimeData.arrivals) {
+            legArrivals.push({
+              type: realtimeData.type,
+              lineName: a.lineName,
+              arrivalMessage: a.arrivalMessage,
+              arrivalTime: a.arrivalTime,
+              startStation: realtimeData.startStation,
+              endStation: realtimeData.endStation,
+              destination: a.destination,
+            });
+          }
+        } else {
+          for (const name of leg.lineNames) {
+            legArrivals.push({
+              type: leg.type as "bus" | "subway",
+              lineName: name,
+              arrivalMessage: "실시간 정보 없음",
+              arrivalTime:
+                AVERAGE_HEADWAY[leg.type as "bus" | "subway"] ??
+                AVERAGE_HEADWAY.bus,
+              startStation: leg.startStation ?? undefined,
+              endStation: leg.endStation ?? undefined,
+            });
+          }
         }
       }
     }
 
-    if (allArrivals.length > 0) {
+    // 대기 시간 결정: 첫 번째 대중교통 구간 기준
+    let waitTime: number; // 초
+    let isEstimate: boolean;
+
+    const firstLeg = transitLegs[0];
+    if (firstLeg && isIntercityBusLeg(firstLeg, route.routeSource)) {
+      // 첫 구간이 시외버스인 경우
+      const firstIntercity = intercityResults.find((r) => r.leg === firstLeg);
+      if (firstIntercity && firstIntercity.departures.length > 0) {
+        waitTime = firstIntercity.departures[0].waitMinutes * 60;
+        isEstimate = false;
+      } else {
+        waitTime = AVERAGE_HEADWAY.bus;
+        isEstimate = true;
+      }
+    } else if (allArrivals.length > 0) {
       waitTime = allArrivals[0].arrivals[0]?.arrivalTime ?? 0;
       isEstimate = false;
     } else {
-      const firstType = transitLegs[0]?.type as "bus" | "subway" | undefined;
+      const firstType = firstLeg?.type as "bus" | "subway" | undefined;
       waitTime =
         firstType && firstType in AVERAGE_HEADWAY
           ? AVERAGE_HEADWAY[firstType]

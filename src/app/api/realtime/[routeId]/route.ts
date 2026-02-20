@@ -1,8 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { RealtimeTransitService } from "@/services/realtime-transit";
+import { IntercityBusService } from "@/services/intercity-bus-service";
 import { isOffHours } from "@/lib/time-utils";
 import { requireAuth, handleApiError, NotFoundError, ForbiddenError, BadRequestError } from "@/lib/errors";
+import type { ArrivalInfo } from "@/types";
+
+/**
+ * Leg이 시외/고속버스 구간인지 판별합니다.
+ */
+function isIntercityBusLeg(
+  leg: { type: string; legSubType?: string | null; startStationId?: string | null },
+  routeSource?: string | null
+): boolean {
+  if (leg.legSubType === "intercity_bus" || leg.legSubType === "express_bus") {
+    return true;
+  }
+  if (routeSource === "inter_local" && leg.type === "bus" && !leg.startStationId) {
+    return true;
+  }
+  return false;
+}
 
 export async function GET(
   request: NextRequest,
@@ -53,12 +71,54 @@ export async function GET(
       });
     }
 
-    // 실시간 도착 정보 조회 (모든 대중교통 구간)
-    const service = new RealtimeTransitService();
-    const allArrivals = await service.getAllTransitArrivals(savedRoute.legs);
+    // 시내/시외 구간 분리
+    const cityLegs = savedRoute.legs.filter(
+      (leg) =>
+        (leg.type === "bus" || leg.type === "subway") &&
+        !isIntercityBusLeg(leg, savedRoute.routeSource)
+    );
+    const intercityLegs = savedRoute.legs.filter(
+      (leg) =>
+        leg.type === "bus" &&
+        isIntercityBusLeg(leg, savedRoute.routeSource)
+    );
 
-    // 모든 구간의 도착 정보를 합침
-    const arrivals = allArrivals.flatMap(({ arrivals }) => arrivals);
+    // 시내 실시간 + 시외 시간표 병렬 조회
+    const realtimeService = new RealtimeTransitService();
+    const intercityService = new IntercityBusService();
+
+    const [cityArrivals, intercityResults] = await Promise.all([
+      cityLegs.length > 0
+        ? realtimeService.getAllTransitArrivals(cityLegs)
+        : Promise.resolve([]),
+      Promise.all(
+        intercityLegs.map(async (leg) => ({
+          leg,
+          departures: await intercityService.getUpcomingDepartures(
+            leg.startStation ?? "",
+            leg.endStation ?? "",
+            2
+          ),
+        }))
+      ),
+    ]);
+
+    // 결과 통합
+    const arrivals: ArrivalInfo[] = cityArrivals.flatMap(({ arrivals }) => arrivals);
+
+    // 시외버스 시간표를 ArrivalInfo 형태로 변환
+    for (const result of intercityResults) {
+      for (const dep of result.departures) {
+        arrivals.push({
+          stationName: result.leg.startStation ?? "",
+          lineName: result.leg.lineNames[0] || "시외버스",
+          direction: `${result.leg.endStation ?? ""} 방면`,
+          arrivalTime: dep.waitMinutes * 60,
+          arrivalMessage: `${dep.departureTime} 출발 (${dep.waitMinutes}분 후)`,
+          vehicleType: "시외버스",
+        });
+      }
+    }
 
     if (arrivals.length === 0) {
       return NextResponse.json({

@@ -367,16 +367,31 @@ export class KakaoMapParser {
           section.vehicle.type === "INTERCITY_BUS"
         ) {
           // 열차/시외버스 구간
+          const VEHICLE_TYPE_LABELS: Record<string, string> = {
+            EXPRESS_BUS: "고속버스",
+            INTERCITY_BUS: "시외버스",
+            TRAIN: "열차",
+          };
           const lineName =
             section.vehicle.subType ??
             route.vehicles ??
+            VEHICLE_TYPE_LABELS[section.vehicle.type] ??
             section.vehicle.type;
+          const isIntercityBus =
+            section.vehicle.type === "EXPRESS_BUS" ||
+            section.vehicle.type === "INTERCITY_BUS";
           legs.push({
             type: "bus",
             lineNames: [lineName],
             startStation: section.departure.name,
             endStation: section.arrival.name,
             sectionTime: Math.round(section.time.value / 60),
+            ...(isIntercityBus && {
+              legSubType:
+                section.vehicle.type === "EXPRESS_BUS"
+                  ? "express_bus"
+                  : "intercity_bus",
+            }),
           });
         }
       }

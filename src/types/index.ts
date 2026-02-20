@@ -20,6 +20,7 @@ export interface RouteLeg {
   stationCount?: number;
   sectionTime: number; // 분
   distance?: number; // 미터
+  legSubType?: string; // "intercity_bus" | "express_bus" (시외/고속버스 구분)
 }
 
 // 대중교통 경로
@@ -56,6 +57,7 @@ export interface LegArrivalInfo {
   startStation?: string; // 승차 정류장/역
   endStation?: string; // 하차 정류장/역
   destination?: string; // 종착역 (지하철)
+  isSchedule?: boolean; // true = 시간표 기반 (시외버스)
 }
 
 // 경로 타입

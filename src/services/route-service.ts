@@ -64,6 +64,7 @@ export const RouteService = {
           stationCount: leg.stationCount ?? null,
           sectionTime: leg.sectionTime,
           distance: leg.distance ?? null,
+          legSubType: leg.legSubType ?? null,
         })),
       },
     };

@@ -1,16 +1,41 @@
+/** 시외/고속버스 lineName 패턴 */
+const INTERCITY_LINE_NAMES = ["시외버스", "고속버스", "시외", "고속", "EXPRESS_BUS", "INTERCITY_BUS"];
+
+/** 영문 vehicle type → 한국어 표시명 */
+const LINE_NAME_LABELS: Record<string, string> = {
+  EXPRESS_BUS: "고속버스",
+  INTERCITY_BUS: "시외버스",
+  TRAIN: "열차",
+};
+
+function isIntercityBus(lineName: string): boolean {
+  return INTERCITY_LINE_NAMES.some(
+    (name) => lineName === name || lineName.includes(name)
+  );
+}
+
+function displayLineName(lineName: string): string {
+  return LINE_NAME_LABELS[lineName] ?? lineName;
+}
+
 export default function TransportBadge({
   type,
   lineName,
+  isSchedule,
 }: {
   type: "bus" | "subway";
   lineName: string;
+  isSchedule?: boolean;
 }) {
-  const colorClasses =
-    type === "bus"
+  const intercity = type === "bus" && (isSchedule || isIntercityBus(lineName));
+
+  const colorClasses = intercity
+    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+    : type === "bus"
       ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
       : "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300";
 
-  const label = type === "bus" ? "버스" : "지하철";
+  const label = intercity ? "" : type === "bus" ? "버스" : "지하철";
 
   return (
     <span
@@ -45,7 +70,7 @@ export default function TransportBadge({
           />
         </svg>
       )}
-      {label} {lineName}
+      {label}{label ? " " : ""}{displayLineName(lineName)}
     </span>
   );
 }
