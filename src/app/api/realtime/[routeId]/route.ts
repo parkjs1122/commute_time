@@ -89,7 +89,14 @@ export async function GET(
 
     const [cityArrivals, intercityResults] = await Promise.all([
       cityLegs.length > 0
-        ? realtimeService.getAllTransitArrivals(cityLegs)
+        ? realtimeService.getAllTransitArrivals(cityLegs, {
+            onResolvedGyeonggiStation: (legId, stationId) => {
+              prisma.routeLeg.update({
+                where: { id: legId },
+                data: { gyeonggiStationId: stationId },
+              }).catch((err) => console.error("[RealtimeAPI] gyeonggiStationId 저장 실패:", err));
+            },
+          })
         : Promise.resolve([]),
       Promise.all(
         intercityLegs.map(async (leg) => ({

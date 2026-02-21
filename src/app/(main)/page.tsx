@@ -411,11 +411,13 @@ function RefreshIndicator({
   lastUpdated,
   isRefreshing,
   countdown,
+  isOffHours,
   onManualRefresh,
 }: {
   lastUpdated: string;
   isRefreshing: boolean;
   countdown: number;
+  isOffHours: boolean;
   onManualRefresh: () => void;
 }) {
   return (
@@ -423,6 +425,8 @@ function RefreshIndicator({
       <span className="text-xs text-gray-400 dark:text-gray-500">
         {isRefreshing ? (
           "갱신 중..."
+        ) : isOffHours ? (
+          "운행 종료"
         ) : (
           <>
             {formatLastUpdated(lastUpdated)} 갱신 · {countdown}초 후
@@ -450,20 +454,61 @@ function RefreshIndicator({
 }
 
 // ---------------------------------------------------------------------------
-// Dashboard page
+// 방안 4: 적응형 폴링 간격 계산
+// 첫 번째 경로의 waitTime에 따라 갱신 주기를 조정.
+// 운행 시간 외인 경우 0을 반환하여 폴링을 중단.
 // ---------------------------------------------------------------------------
 
-const REFRESH_INTERVAL = 30;
+const DEFAULT_INTERVAL = 30;
+
+function getAdaptiveInterval(data: DashboardResponse | null): number {
+  if (!data || data.routes.length === 0) return DEFAULT_INTERVAL;
+
+  // 모든 경로가 운행 시간 외면 폴링 중단 (estimatedArrival이 ""이면 falsy)
+  const allOffHours = data.routes.every((r) => !r.estimatedArrival);
+  if (allOffHours) return 0;
+
+  const firstWait = data.routes[0]?.waitTime ?? 0;
+  if (firstWait <= 60) return 15;              // 1분 이내 → 15초
+  if (firstWait <= 180) return 20;             // 3분 이내 → 20초
+  if (firstWait <= 300) return DEFAULT_INTERVAL; // 5분 이내 → 30초 (기본)
+  return Math.min(Math.floor(firstWait / 2), 60); // 그 이상 → 최대 60초
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard page
+// ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(REFRESH_INTERVAL);
+  const [countdown, setCountdown] = useState(DEFAULT_INTERVAL);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // fetchDashboard의 최신 참조를 저장 (startTimers에서 circular deps 없이 사용)
+  const fetchDashboardRef = useRef<(options?: { silent?: boolean }) => Promise<void>>(async () => {});
+
+  const stopTimers = useCallback(() => {
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+  }, []);
+
+  const startTimers = useCallback((interval: number) => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    setCountdown(interval);
+    intervalRef.current = setInterval(
+      () => fetchDashboardRef.current({ silent: true }),
+      interval * 1000
+    );
+    countdownRef.current = setInterval(() => {
+      setCountdown((prev) => (prev <= 1 ? interval : prev - 1));
+    }, 1000);
+  }, []); // fetchDashboardRef는 ref이므로 deps 불필요
 
   const fetchDashboard = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -481,41 +526,39 @@ export default function DashboardPage() {
         const result: DashboardResponse = await response.json();
         setData(result);
         setError(null);
+
+        // 방안 4: 응답 기반 적응형 폴링 간격으로 타이머 재시작
+        const nextInterval = getAdaptiveInterval(result);
+        if (nextInterval > 0) {
+          startTimers(nextInterval);
+        } else {
+          // 운행 시간 외: 폴링 중단
+          stopTimers();
+          setCountdown(0);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "대시보드 데이터를 불러오는 중 오류가 발생했습니다.");
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
-        setCountdown(REFRESH_INTERVAL);
       }
     },
-    []
+    [startTimers, stopTimers]
   );
 
-  const startTimers = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    intervalRef.current = setInterval(() => fetchDashboard({ silent: true }), REFRESH_INTERVAL * 1000);
-    countdownRef.current = setInterval(() => {
-      setCountdown((prev) => (prev <= 1 ? REFRESH_INTERVAL : prev - 1));
-    }, 1000);
+  // fetchDashboard ref 최신화
+  useEffect(() => {
+    fetchDashboardRef.current = fetchDashboard;
   }, [fetchDashboard]);
-
-  const stopTimers = useCallback(() => {
-    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
-  }, []);
 
   useEffect(() => {
     fetchDashboard();
-    startTimers();
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
         stopTimers();
       } else {
         fetchDashboard({ silent: true });
-        startTimers();
       }
     };
 
@@ -524,12 +567,14 @@ export default function DashboardPage() {
       stopTimers();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [fetchDashboard, startTimers, stopTimers]);
+  }, [fetchDashboard, stopTimers]);
 
   function handleManualRefresh() {
     fetchDashboard({ silent: true });
-    startTimers();
   }
+
+  const isOffHours = data !== null && data.routes.length > 0
+    && data.routes.every((r) => !r.estimatedArrival);
 
   if (isLoading) {
     return (
@@ -565,6 +610,7 @@ export default function DashboardPage() {
           lastUpdated={data.lastUpdated}
           isRefreshing={isRefreshing}
           countdown={countdown}
+          isOffHours={isOffHours}
           onManualRefresh={handleManualRefresh}
         />
       </div>

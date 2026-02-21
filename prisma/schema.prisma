@@ -61,7 +61,8 @@ model RouteLeg {
   lineColor      String?    // 노선 색상
   startStation   String?    // 승차 정류장
   endStation     String?    // 하차 정류장
-  startStationId String?    // 공공데이터 정류장 ID
+  startStationId    String?    // 공공데이터 정류장 ID (버스: mobileNo, 지하철: 역명)
+  gyeonggiStationId String?    // 경기도 버스 내부 정류소 ID (lazy 영속화, resolveGyeonggiStationId 결과)
   stationCount   Int?       // 정차 역 수
   sectionTime    Int        // 구간 소요 시간 (분)
   distance       Int?       // 구간 거리 (미터)

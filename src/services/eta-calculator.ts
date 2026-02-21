@@ -1,14 +1,27 @@
 import { RealtimeTransitService } from "@/services/realtime-transit";
 import { IntercityBusService } from "@/services/intercity-bus-service";
 import { RouteService } from "@/services/route-service";
+import { prisma } from "@/lib/prisma";
 import type { ETAResult, LegArrivalInfo, DashboardResponse, SavedRouteWithLegs, RouteType } from "@/types";
 import { isOffHours } from "@/lib/time-utils";
+import type { RouteLeg } from "@prisma/client";
 
 /** 평균 배차 간격 (초) */
 const AVERAGE_HEADWAY = {
   bus: 600, // 10분
   subway: 300, // 5분
 } as const;
+
+/** getAllTransitArrivals 반환 타입 (단일 leg 결과) */
+type CityArrivalEntry = {
+  type: "bus" | "subway";
+  arrivals: import("@/types").ArrivalInfo[];
+  startStation?: string;
+  endStation?: string;
+};
+
+/** 시외버스 출발 정보 */
+type IntercityDeparture = { departureTime: string; waitMinutes: number };
 
 /**
  * Leg이 시외/고속버스 구간인지 판별합니다.
@@ -34,6 +47,39 @@ function isIntercityBusLeg(
 }
 
 /**
+ * 시내 대중교통 leg의 중복 제거 키를 생성합니다.
+ * - 버스: `bus:{startStationId}:{sortedLineNames}`
+ * - 지하철: `subway:{startStation}|{endStation}`
+ */
+function buildCityLegKey(leg: {
+  type: string;
+  startStationId?: string | null;
+  startStation?: string | null;
+  endStation?: string | null;
+  lineNames?: string[];
+}): string {
+  if (leg.type === "bus") {
+    const sortedLines = [...(leg.lineNames ?? [])].sort().join(",");
+    return `bus:${leg.startStationId ?? ""}:${sortedLines}`;
+  }
+  if (leg.type === "subway") {
+    return `subway:${leg.startStation ?? ""}|${leg.endStation ?? ""}`;
+  }
+  return "";
+}
+
+/**
+ * 시외버스 leg의 중복 제거 키를 생성합니다.
+ * `{startStation}|{endStation}`
+ */
+function buildIntercityLegKey(leg: {
+  startStation?: string | null;
+  endStation?: string | null;
+}): string {
+  return `${leg.startStation ?? ""}|${leg.endStation ?? ""}`;
+}
+
+/**
  * ETA 계산 엔진
  *
  * 저장된 경로에 대해 실시간 도착 정보를 조회하고,
@@ -51,57 +97,35 @@ export class ETACalculator {
   }
 
   /**
-   * 단일 저장 경로에 대한 ETA를 계산합니다.
-   *
-   * @param route - Prisma SavedRoute (legs 포함)
-   * @returns ETAResult
+   * 운행 시간 외 ETAResult를 반환합니다.
    */
-  async calculateETA(route: SavedRouteWithLegs): Promise<ETAResult> {
-    const now = new Date();
+  private offHoursETA(route: SavedRouteWithLegs): ETAResult {
+    return {
+      estimatedArrival: "",
+      waitTime: 0,
+      travelTime: route.totalTime,
+      isEstimate: true,
+      routeId: route.id,
+      routeAlias: route.alias,
+      routeType: route.routeType as RouteType,
+      routeSource: (route.routeSource as "in_local" | "inter_local") ?? undefined,
+      legArrivals: [],
+    };
+  }
 
-    // 운행 시간 외 체크 (새벽 1시 ~ 5시 KST)
-    if (isOffHours()) {
-      return {
-        estimatedArrival: "",
-        waitTime: 0,
-        travelTime: route.totalTime,
-        isEstimate: true,
-        routeId: route.id,
-        routeAlias: route.alias,
-        routeType: route.routeType as RouteType,
-        routeSource: (route.routeSource as "in_local" | "inter_local") ?? undefined,
-        legArrivals: [],
-      };
-    }
-
-    // 대중교통 구간을 시내/시외로 분류
+  /**
+   * 사전에 조회된 도착 정보로부터 ETAResult를 계산합니다.
+   * (실제 API 호출 없음 — 순수 계산)
+   */
+  private buildETAResult(
+    route: SavedRouteWithLegs,
+    now: Date,
+    allArrivals: CityArrivalEntry[],
+    intercityResults: Array<{ leg: RouteLeg; departures: IntercityDeparture[] }>
+  ): ETAResult {
     const transitLegs = route.legs.filter(
       (leg) => leg.type === "bus" || leg.type === "subway"
     );
-
-    const cityLegs = transitLegs.filter(
-      (leg) => !isIntercityBusLeg(leg, route.routeSource)
-    );
-    const intercityLegs = transitLegs.filter((leg) =>
-      isIntercityBusLeg(leg, route.routeSource)
-    );
-
-    // 시내 실시간 + 시외 시간표를 병렬 조회
-    const [allArrivals, intercityResults] = await Promise.all([
-      cityLegs.length > 0
-        ? this.realtimeService.getAllTransitArrivals(cityLegs)
-        : Promise.resolve([]),
-      Promise.all(
-        intercityLegs.map(async (leg) => ({
-          leg,
-          departures: await this.intercityService.getUpcomingDepartures(
-            leg.startStation ?? "",
-            leg.endStation ?? "",
-            2
-          ),
-        }))
-      ),
-    ]);
 
     // route.legs 순서대로 도착 정보를 구성
     const legArrivals: LegArrivalInfo[] = [];
@@ -134,7 +158,7 @@ export class ETACalculator {
           });
         }
       } else {
-        // 시내 구간: 기존 실시간 도착 정보
+        // 시내 구간: 실시간 도착 정보
         const realtimeData = allArrivals.find(
           (a) => a.startStation === (leg.startStation ?? undefined)
         );
@@ -217,20 +241,172 @@ export class ETACalculator {
   }
 
   /**
+   * 고유 시내 transit leg 목록을 받아 병렬로 도착 정보를 조회하고
+   * key → CityArrivalEntry 맵을 반환합니다.
+   * (방안 1의 gyeonggiStationId DB 영속화 콜백 포함)
+   */
+  private async fetchCityArrivalsCache(
+    entries: [string, RouteLeg][]
+  ): Promise<Map<string, CityArrivalEntry | null>> {
+    const cache = new Map<string, CityArrivalEntry | null>();
+    await Promise.all(
+      entries.map(async ([key, leg]) => {
+        const results = await this.realtimeService.getAllTransitArrivals([leg], {
+          onResolvedGyeonggiStation: (legId, stationId) => {
+            prisma.routeLeg
+              .update({ where: { id: legId }, data: { gyeonggiStationId: stationId } })
+              .catch((err) => console.error("[ETACalculator] gyeonggiStationId 저장 실패:", err));
+          },
+        });
+        cache.set(key, results[0] ?? null);
+      })
+    );
+    return cache;
+  }
+
+  /**
+   * 고유 시외버스 leg 목록을 받아 병렬로 시간표를 조회하고
+   * key → IntercityDeparture[] 맵을 반환합니다.
+   */
+  private async fetchIntercityCache(
+    entries: [string, RouteLeg][]
+  ): Promise<Map<string, IntercityDeparture[]>> {
+    const cache = new Map<string, IntercityDeparture[]>();
+    await Promise.all(
+      entries.map(async ([key, leg]) => {
+        const departures = await this.intercityService.getUpcomingDepartures(
+          leg.startStation ?? "",
+          leg.endStation ?? "",
+          2
+        );
+        cache.set(key, departures);
+      })
+    );
+    return cache;
+  }
+
+  /**
+   * 단일 저장 경로에 대한 ETA를 계산합니다.
+   * (독립 사용 또는 테스트용 — 내부에서 직접 API 조회)
+   *
+   * @param route - Prisma SavedRoute (legs 포함)
+   * @returns ETAResult
+   */
+  async calculateETA(route: SavedRouteWithLegs): Promise<ETAResult> {
+    const now = new Date();
+
+    if (isOffHours()) {
+      return this.offHoursETA(route);
+    }
+
+    // 대중교통 구간을 시내/시외로 분류
+    const transitLegs = route.legs.filter(
+      (leg) => leg.type === "bus" || leg.type === "subway"
+    );
+
+    const cityLegs = transitLegs.filter(
+      (leg) => !isIntercityBusLeg(leg, route.routeSource)
+    );
+    const intercityLegs = transitLegs.filter((leg) =>
+      isIntercityBusLeg(leg, route.routeSource)
+    );
+
+    // 시내 실시간 + 시외 시간표를 병렬 조회
+    const [allArrivals, intercityResults] = await Promise.all([
+      cityLegs.length > 0
+        ? this.realtimeService.getAllTransitArrivals(cityLegs, {
+            onResolvedGyeonggiStation: (legId, stationId) => {
+              prisma.routeLeg
+                .update({ where: { id: legId }, data: { gyeonggiStationId: stationId } })
+                .catch((err) => console.error("[ETACalculator] gyeonggiStationId 저장 실패:", err));
+            },
+          })
+        : Promise.resolve([]),
+      Promise.all(
+        intercityLegs.map(async (leg) => ({
+          leg,
+          departures: await this.intercityService.getUpcomingDepartures(
+            leg.startStation ?? "",
+            leg.endStation ?? "",
+            2
+          ),
+        }))
+      ),
+    ]);
+
+    return this.buildETAResult(route, now, allArrivals, intercityResults);
+  }
+
+  /**
    * 사용자의 모든 저장 경로에 대한 ETA를 계산합니다.
    * 기본 경로가 먼저, 나머지는 생성일 역순으로 정렬됩니다.
+   *
+   * 최적화: 모든 경로의 transit leg를 먼저 수집 → 중복 제거 →
+   * 고유 정류장/역당 1회만 API 호출 → 결과를 각 경로에 분배.
    *
    * @param userId - 사용자 ID
    * @returns DashboardResponse
    */
   async calculateAllETAs(userId: string): Promise<DashboardResponse> {
-    // RouteService를 통해 사용자의 모든 경로 조회 (isDefault desc, createdAt desc)
     const routes = await RouteService.getRoutes(userId);
+    const now = new Date();
 
-    // 모든 경로에 대해 병렬로 ETA 계산
-    const etaResults = await Promise.all(
-      routes.map((route) => this.calculateETA(route))
-    );
+    let etaResults: ETAResult[];
+
+    if (isOffHours()) {
+      etaResults = routes.map((route) => this.offHoursETA(route));
+    } else {
+      // 1. 모든 경로에서 고유 transit leg 수집 (중복 제거)
+      const cityLegMap = new Map<string, RouteLeg>();
+      const intercityLegMap = new Map<string, RouteLeg>();
+
+      for (const route of routes) {
+        for (const leg of route.legs) {
+          if (leg.type !== "bus" && leg.type !== "subway") continue;
+          if (isIntercityBusLeg(leg, route.routeSource)) {
+            const key = buildIntercityLegKey(leg);
+            if (!intercityLegMap.has(key)) intercityLegMap.set(key, leg);
+          } else {
+            const key = buildCityLegKey(leg);
+            if (!cityLegMap.has(key)) cityLegMap.set(key, leg);
+          }
+        }
+      }
+
+      // 2. 고유 leg만 병렬 배치 조회
+      const [cityCache, intercityCache] = await Promise.all([
+        this.fetchCityArrivalsCache([...cityLegMap.entries()]),
+        this.fetchIntercityCache([...intercityLegMap.entries()]),
+      ]);
+
+      // 3. 경로별 ETA 계산 (캐시에서 조회 — 추가 API 호출 없음)
+      etaResults = routes.map((route) => {
+        const transitLegs = route.legs.filter(
+          (leg) => leg.type === "bus" || leg.type === "subway"
+        );
+        const cityLegs = transitLegs.filter(
+          (leg) => !isIntercityBusLeg(leg, route.routeSource)
+        );
+        const intercityLegs = transitLegs.filter((leg) =>
+          isIntercityBusLeg(leg, route.routeSource)
+        );
+
+        // 이 경로의 city legs에 해당하는 arrivals 조립
+        const allArrivals: CityArrivalEntry[] = [];
+        for (const leg of cityLegs) {
+          const entry = cityCache.get(buildCityLegKey(leg));
+          if (entry) allArrivals.push(entry);
+        }
+
+        // 이 경로의 intercity legs에 해당하는 결과 조립
+        const intercityResults = intercityLegs.map((leg) => ({
+          leg,
+          departures: intercityCache.get(buildIntercityLegKey(leg)) ?? [],
+        }));
+
+        return this.buildETAResult(route, now, allArrivals, intercityResults);
+      });
+    }
 
     // 현재 시각(KST) 기준으로 경로 타입별 정렬
     // 13시 이전: 출근 우선, 13시 이후: 퇴근 우선

@@ -107,6 +107,19 @@ interface SubwayArrivalResponse {
   realtimeArrivalList?: SubwayArrivalItem[];
 }
 
+// ── 서버 레벨 인메모리 TTL 캐시 (방안 3) ──────────────────────────────────
+// RealtimeTransitService는 요청마다 인스턴스화되므로 캐시는 모듈 레벨에 유지.
+// 같은 서버 인스턴스의 여러 사용자 요청이 동일 정류장 조회 시 API 재호출 방지.
+const ARRIVAL_CACHE_TTL_MS = 20_000; // 20초
+
+interface ArrivalCacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
+const _busArrivalCache = new Map<string, ArrivalCacheEntry<ArrivalInfo[]>>();
+const _subwayRawCache = new Map<string, ArrivalCacheEntry<SubwayArrivalItem[]>>();
+
 export class RealtimeTransitService {
   private dataGoKrKey: string;
   private seoulDataKey: string;
@@ -134,7 +147,8 @@ export class RealtimeTransitService {
   async getBusArrival(
     stationId: string,
     lineNames?: string[],
-    stationName?: string
+    stationName?: string,
+    preResolvedGyeonggiId?: string
   ): Promise<ArrivalInfo[]> {
     if (!this.dataGoKrKey) {
       console.error(
@@ -143,9 +157,16 @@ export class RealtimeTransitService {
       return [];
     }
 
+    // 방안 3: 정류장 단위 캐시 확인
+    const cacheKey = `bus:${stationId}`;
+    const now = Date.now();
+    const cached = _busArrivalCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) return cached.data;
+
     // 서울 arsId는 "XX-XXX" 형태 (대시 포함), 경기도 mobileNo는 순수 숫자
     // 포맷으로 서울/경기 구분하여 불필요한 API 호출 방지
     const isSeoulFormat = stationId.includes("-");
+    let result: ArrivalInfo[] = [];
 
     if (isSeoulFormat) {
       // 서울 API 시도
@@ -158,17 +179,23 @@ export class RealtimeTransitService {
               arrival.lineName.toLowerCase() === name.toLowerCase()
             )
           );
-          if (hasMatch) return seoulArrivals;
-          // 매칭 없음 → 경기도 시도
+          if (hasMatch) {
+            result = seoulArrivals;
+          }
+          // 매칭 없음 → 경기도 시도 (result는 여전히 [])
         } else {
-          return seoulArrivals;
+          result = seoulArrivals;
         }
       }
     }
 
-    // 경기도 시도 (mobileNo → stationId 변환 후 조회)
-    const gyeonggiArrivals = await this.getGyeonggiBusArrival(stationId, stationName);
-    return gyeonggiArrivals;
+    if (result.length === 0) {
+      // 경기도 시도 (mobileNo → stationId 변환 후 조회)
+      result = await this.getGyeonggiBusArrival(stationId, stationName, preResolvedGyeonggiId);
+    }
+
+    _busArrivalCache.set(cacheKey, { data: result, expiresAt: now + ARRIVAL_CACHE_TTL_MS });
+    return result;
   }
 
   /**
@@ -359,11 +386,13 @@ export class RealtimeTransitService {
    */
   private async getGyeonggiBusArrival(
     mobileNo: string,
-    stationName?: string
+    stationName?: string,
+    preResolvedStationId?: string
   ): Promise<ArrivalInfo[]> {
     try {
-      // mobileNo → stationId 변환
-      const stationId = await this.resolveGyeonggiStationId(mobileNo, stationName);
+      // mobileNo → stationId 변환 (DB에 영속화된 값이 있으면 API 호출 생략)
+      const stationId = preResolvedStationId
+        ?? await this.resolveGyeonggiStationId(mobileNo, stationName);
       if (!stationId) return [];
 
       const params = new URLSearchParams({
@@ -464,15 +493,11 @@ export class RealtimeTransitService {
   }
 
   /**
-   * 서울 지하철 실시간 도착 정보 조회
-   * API: http://swopenAPI.seoul.go.kr/api/subway/{key}/json/realtimeStationArrival/0/10/{stationName}
+   * 서울 지하철 실시간 도착 정보를 원시(raw) 형태로 조회합니다. (방안 3 캐시 적용)
+   * 방향 필터링 없이 해당 역의 모든 열차 정보를 반환합니다.
    * @param stationName - 역 이름 (예: "강남", "서울역")
-   * @returns ArrivalInfo[] - 도착 정보 배열
    */
-  async getSubwayArrival(
-    stationName: string,
-    endStation?: string
-  ): Promise<ArrivalInfo[]> {
+  private async getSubwayRawArrivals(stationName: string): Promise<SubwayArrivalItem[]> {
     if (!this.seoulDataKey) {
       console.error(
         "[RealtimeTransit] SEOUL_OPENDATA_API_KEY가 설정되지 않았습니다."
@@ -480,14 +505,17 @@ export class RealtimeTransitService {
       return [];
     }
 
-    try {
-      // 역 이름에서 "역" 접미사 제거 (API는 "강남" 형태를 기대)
-      const cleanName = stationName.replace(/역$/, "");
+    const cleanName = stationName.replace(/역$/, "");
+    const cacheKey = `subway:${cleanName}`;
+    const now = Date.now();
+    const cached = _subwayRawCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) return cached.data;
 
+    try {
       const url = `http://swopenAPI.seoul.go.kr/api/subway/${encodeURIComponent(this.seoulDataKey)}/json/realtimeStationArrival/0/10/${encodeURIComponent(cleanName)}`;
 
       const response = await fetch(url, {
-        signal: AbortSignal.timeout(10000), // 10초 타임아웃
+        signal: AbortSignal.timeout(10000),
       });
 
       if (!response.ok) {
@@ -498,10 +526,8 @@ export class RealtimeTransitService {
 
       const data: SubwayArrivalResponse = await response.json();
 
-      // API 에러 응답 처리 (INFO-000은 정상 응답)
       if (data.errorMessage && data.errorMessage.code !== "INFO-000") {
         const { code, message } = data.errorMessage;
-        // INFO-200: 해당하는 데이터가 없습니다 (운행 시간 외)
         if (code === "INFO-200") {
           console.info(
             `[RealtimeTransit] 지하철 실시간 정보 없음 (운행 시간 외 가능): ${cleanName}`
@@ -514,107 +540,9 @@ export class RealtimeTransitService {
         return [];
       }
 
-      let items = data.realtimeArrivalList;
-
-      if (!items || items.length === 0) {
-        return [];
-      }
-
-      // 방향 필터링: endStation이 있으면 그래프 BFS로 열차 경유 여부 검증
-      if (endStation) {
-        const cleanEnd = endStation.replace(/역$/, "");
-
-        const filteredItems = items.filter((item) => {
-          const trainTerminal = item.bstatnNm
-            ?.replace(/역$/, "")
-            .replace(/\s+/g, "")
-            .trim();
-
-          if (!trainTerminal) {
-            // 종착역 정보 없음: 기존 방향 매칭 폴백
-            const dir = determineSubwayDirection(
-              item.subwayId,
-              cleanName,
-              cleanEnd
-            );
-            return dir ? item.updnLine === dir : false;
-          }
-
-          // 그래프 BFS로 열차가 목적지를 경유하는지 검증
-          const reaches = willTrainReachStation(
-            item.subwayId,
-            cleanName,
-            cleanEnd,
-            trainTerminal,
-            item.updnLine
-          );
-
-          if (reaches) return true;
-
-          // 종착역이 그래프 데이터에 없는 경우: 방향 매칭 폴백
-          if (!isStationKnown(item.subwayId, trainTerminal)) {
-            const dir = determineSubwayDirection(
-              item.subwayId,
-              cleanName,
-              cleanEnd
-            );
-            return dir ? item.updnLine === dir : false;
-          }
-
-          return false;
-        });
-
-        if (filteredItems.length > 0) {
-          items = filteredItems;
-        } else {
-          // 방향을 판별할 수 없는 경우: 잘못된 방향 정보를 보여주는 것보다
-          // 빈 결과를 반환하여 평균 배차 간격 기반 추정치를 사용하도록 함
-          console.info(
-            `[RealtimeTransit] 지하철 방향 판별 실패: ${cleanName} → ${cleanEnd}, 실시간 정보 생략`
-          );
-          return [];
-        }
-      }
-
-      // 도착 시간 기준 정렬
-      items.sort((a, b) => {
-        const aTime = parseInt(a.barvlDt, 10) || 0;
-        const bTime = parseInt(b.barvlDt, 10) || 0;
-        if (aTime === 0 && bTime === 0) return 0;
-        if (aTime === 0) return -1;
-        if (bTime === 0) return 1;
-        return aTime - bTime;
-      });
-
-      // 최대 2대까지만 표시
-      items = items.slice(0, 2);
-
-      const arrivals: ArrivalInfo[] = items.map((item) => {
-        const arrivalSeconds = parseInt(item.barvlDt, 10) || 0;
-
-        // trainLineNm에서 방면 정보 추출 (예: "수원행 - 구로 방면")
-        const direction = item.trainLineNm || item.updnLine || "";
-
-        // 노선 이름 결정
-        const lineName = item.subwayNm || this.getSubwayLineName(item.subwayId);
-
-        // 종착역 이름 정리 (예: "수원" → "수원행" 표시는 UI에서 처리)
-        const destination = item.bstatnNm?.replace(/역$/, "") || undefined;
-
-        return {
-          stationName: item.statnNm || cleanName,
-          lineName,
-          direction,
-          arrivalTime: arrivalSeconds,
-          arrivalMessage: (item.arvlMsg2 || item.arvlMsg3 || "정보 없음").replace(/\[(\d+)]/g, "$1"),
-          remainingStops: undefined,
-          vehicleType: item.btrainSttus || "지하철",
-          isLastTrain: item.lstcarAt === "1",
-          destination,
-        };
-      });
-
-      return arrivals;
+      const items = data.realtimeArrivalList ?? [];
+      _subwayRawCache.set(cacheKey, { data: items, expiresAt: now + ARRIVAL_CACHE_TTL_MS });
+      return items;
     } catch (error) {
       if (error instanceof Error) {
         console.error(
@@ -630,18 +558,129 @@ export class RealtimeTransitService {
   }
 
   /**
+   * SubwayArrivalItem[] 을 ArrivalInfo[] 로 변환합니다.
+   * endStation 방향 필터링 → 도착 시간 정렬 → 최대 2대 슬라이싱 → 매핑 순서로 처리.
+   */
+  private filterSubwayArrivals(
+    items: SubwayArrivalItem[],
+    stationName: string,
+    endStation?: string
+  ): ArrivalInfo[] {
+    const cleanName = stationName.replace(/역$/, "");
+    let filtered = [...items];
+
+    if (endStation && filtered.length > 0) {
+      const cleanEnd = endStation.replace(/역$/, "");
+
+      const filteredItems = filtered.filter((item) => {
+        const trainTerminal = item.bstatnNm
+          ?.replace(/역$/, "")
+          .replace(/\s+/g, "")
+          .trim();
+
+        if (!trainTerminal) {
+          // 종착역 정보 없음: 기존 방향 매칭 폴백
+          const dir = determineSubwayDirection(item.subwayId, cleanName, cleanEnd);
+          return dir ? item.updnLine === dir : false;
+        }
+
+        // 그래프 BFS로 열차가 목적지를 경유하는지 검증
+        const reaches = willTrainReachStation(
+          item.subwayId,
+          cleanName,
+          cleanEnd,
+          trainTerminal,
+          item.updnLine
+        );
+
+        if (reaches) return true;
+
+        // 종착역이 그래프 데이터에 없는 경우: 방향 매칭 폴백
+        if (!isStationKnown(item.subwayId, trainTerminal)) {
+          const dir = determineSubwayDirection(item.subwayId, cleanName, cleanEnd);
+          return dir ? item.updnLine === dir : false;
+        }
+
+        return false;
+      });
+
+      if (filteredItems.length > 0) {
+        filtered = filteredItems;
+      } else {
+        // 방향을 판별할 수 없는 경우: 잘못된 방향 정보를 보여주는 것보다
+        // 빈 결과를 반환하여 평균 배차 간격 기반 추정치를 사용하도록 함
+        console.info(
+          `[RealtimeTransit] 지하철 방향 판별 실패: ${cleanName} → ${cleanEnd}, 실시간 정보 생략`
+        );
+        return [];
+      }
+    }
+
+    // 도착 시간 기준 정렬
+    filtered.sort((a, b) => {
+      const aTime = parseInt(a.barvlDt, 10) || 0;
+      const bTime = parseInt(b.barvlDt, 10) || 0;
+      if (aTime === 0 && bTime === 0) return 0;
+      if (aTime === 0) return -1;
+      if (bTime === 0) return 1;
+      return aTime - bTime;
+    });
+
+    // 최대 2대까지만 표시
+    filtered = filtered.slice(0, 2);
+
+    return filtered.map((item) => {
+      const arrivalSeconds = parseInt(item.barvlDt, 10) || 0;
+      const direction = item.trainLineNm || item.updnLine || "";
+      const lineName = item.subwayNm || this.getSubwayLineName(item.subwayId);
+      const destination = item.bstatnNm?.replace(/역$/, "") || undefined;
+
+      return {
+        stationName: item.statnNm || cleanName,
+        lineName,
+        direction,
+        arrivalTime: arrivalSeconds,
+        arrivalMessage: (item.arvlMsg2 || item.arvlMsg3 || "정보 없음").replace(/\[(\d+)]/g, "$1"),
+        remainingStops: undefined,
+        vehicleType: item.btrainSttus || "지하철",
+        isLastTrain: item.lstcarAt === "1",
+        destination,
+      };
+    });
+  }
+
+  /**
+   * 서울 지하철 실시간 도착 정보 조회
+   * API: http://swopenAPI.seoul.go.kr/api/subway/{key}/json/realtimeStationArrival/0/10/{stationName}
+   * @param stationName - 역 이름 (예: "강남", "서울역")
+   * @returns ArrivalInfo[] - 도착 정보 배열
+   */
+  async getSubwayArrival(
+    stationName: string,
+    endStation?: string
+  ): Promise<ArrivalInfo[]> {
+    const items = await this.getSubwayRawArrivals(stationName);
+    return this.filterSubwayArrivals(items, stationName, endStation);
+  }
+
+  /**
    * 경로의 모든 대중교통 Leg에 대한 도착 정보 조회
    * @param legs - 경로 구간 배열 (DB에서 조회한 RouteLeg 데이터)
    * @returns 각 대중교통 구간별 도착 정보 배열 (구간 순서 유지)
    */
   async getAllTransitArrivals(
     legs: Array<{
+      id?: string | null;
+      gyeonggiStationId?: string | null;
       type: string;
       startStation?: string | null;
       endStation?: string | null;
       startStationId?: string | null;
       lineNames?: string[];
-    }>
+    }>,
+    options?: {
+      onResolvedGyeonggiStation?: (legId: string, stationId: string) => void;
+    }
   ): Promise<
     Array<{
       type: "bus" | "subway";
@@ -658,6 +697,20 @@ export class RealtimeTransitService {
       return [];
     }
 
+    // 방안 5: 지하철 역별 raw 데이터 사전 조회 (동일 역 API 중복 제거)
+    // 같은 역에서 여러 leg(다른 노선/방향)가 있어도 API 1회만 호출.
+    const uniqueSubwayStations = new Set(
+      transitLegs
+        .filter((l) => l.type === "subway" && l.startStation)
+        .map((l) => l.startStation!)
+    );
+    const subwayRawMap = new Map<string, SubwayArrivalItem[]>();
+    await Promise.all(
+      [...uniqueSubwayStations].map(async (station) => {
+        subwayRawMap.set(station, await this.getSubwayRawArrivals(station));
+      })
+    );
+
     // 모든 대중교통 구간을 병렬로 조회
     const queries = transitLegs.map(async (leg) => {
       try {
@@ -670,7 +723,29 @@ export class RealtimeTransitService {
             );
             return null;
           }
-          arrivals = await this.getBusArrival(leg.startStationId, leg.lineNames, leg.startStation ?? undefined);
+
+          // 경기도 버스: gyeonggiStationId가 DB에 있으면 resolve API 호출 생략
+          const isSeoulFormat = leg.startStationId.includes("-");
+          let preResolvedId: string | undefined = undefined;
+
+          if (!isSeoulFormat) {
+            if (leg.gyeonggiStationId) {
+              preResolvedId = leg.gyeonggiStationId;
+            } else {
+              const resolved = await this.resolveGyeonggiStationId(
+                leg.startStationId,
+                leg.startStation ?? undefined
+              );
+              if (resolved) {
+                preResolvedId = resolved;
+                if (leg.id && options?.onResolvedGyeonggiStation) {
+                  options.onResolvedGyeonggiStation(leg.id, resolved);
+                }
+              }
+            }
+          }
+
+          arrivals = await this.getBusArrival(leg.startStationId, leg.lineNames, leg.startStation ?? undefined, preResolvedId);
         } else if (leg.type === "subway") {
           if (!leg.startStation) {
             console.warn(
@@ -678,7 +753,10 @@ export class RealtimeTransitService {
             );
             return null;
           }
-          arrivals = await this.getSubwayArrival(
+          // 방안 5: 사전 조회된 raw 데이터에서 방향 필터링만 적용
+          const rawItems = subwayRawMap.get(leg.startStation) ?? [];
+          arrivals = this.filterSubwayArrivals(
+            rawItems,
             leg.startStation,
             leg.endStation ?? undefined
           );
