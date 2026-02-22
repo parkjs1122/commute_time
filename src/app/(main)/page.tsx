@@ -527,20 +527,16 @@ function MiniDashboard({
 }
 
 // ---------------------------------------------------------------------------
-// Adaptive polling interval
+// Polling interval
 // ---------------------------------------------------------------------------
 
-const DEFAULT_INTERVAL = 30;
+const REFRESH_INTERVAL = 60;
 
-function getAdaptiveInterval(data: DashboardResponse | null): number {
-  if (!data || data.routes.length === 0) return DEFAULT_INTERVAL;
+function getPollingInterval(data: DashboardResponse | null): number {
+  if (!data || data.routes.length === 0) return REFRESH_INTERVAL;
   const allOffHours = data.routes.every((r) => !r.estimatedArrival);
   if (allOffHours) return 0;
-  const firstWait = data.routes[0]?.waitTime ?? 0;
-  if (firstWait <= 60) return 15;
-  if (firstWait <= 180) return 20;
-  if (firstWait <= 300) return DEFAULT_INTERVAL;
-  return Math.min(Math.floor(firstWait / 2), 60);
+  return REFRESH_INTERVAL;
 }
 
 // ---------------------------------------------------------------------------
@@ -556,7 +552,7 @@ function DashboardInner() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(DEFAULT_INTERVAL);
+  const [countdown, setCountdown] = useState(REFRESH_INTERVAL);
   const [filter, setFilter] = useState<FilterType>("all");
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -591,7 +587,7 @@ function DashboardInner() {
       setData(result);
       setError(null);
       for (const route of result.routes) { notify(route); }
-      const nextInterval = getAdaptiveInterval(result);
+      const nextInterval = getPollingInterval(result);
       if (nextInterval > 0) { startTimers(nextInterval); } else { stopTimers(); setCountdown(0); }
     } catch (err) {
       setError(err instanceof Error ? err.message : "대시보드 데이터를 불러오는 중 오류가 발생했습니다.");
