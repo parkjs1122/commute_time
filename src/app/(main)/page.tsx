@@ -427,6 +427,29 @@ function AdditionalRouteCard({ route }: { route: ETAResult }) {
 // Refresh indicator
 // ---------------------------------------------------------------------------
 
+function RefreshStatusText({
+  lastUpdated, isRefreshing, countdown, isOffHours,
+}: {
+  lastUpdated: string; isRefreshing: boolean; countdown: number; isOffHours: boolean;
+}) {
+  return (
+    <span className="text-xs text-gray-400 dark:text-gray-500">
+      {isRefreshing ? "갱신 중..." : isOffHours ? "운행 종료" : <>{formatLastUpdated(lastUpdated)} 갱신 · {countdown}초 후</>}
+    </span>
+  );
+}
+
+function RefreshButton({ isRefreshing, onManualRefresh }: { isRefreshing: boolean; onManualRefresh: () => void }) {
+  return (
+    <button onClick={onManualRefresh} disabled={isRefreshing}
+      className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 dark:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-300" aria-label="새로고침">
+      <svg className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M2.985 19.644l3.181-3.182" />
+      </svg>
+    </button>
+  );
+}
+
 function RefreshIndicator({
   lastUpdated, isRefreshing, countdown, isOffHours, onManualRefresh,
 }: {
@@ -434,15 +457,8 @@ function RefreshIndicator({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-gray-400 dark:text-gray-500">
-        {isRefreshing ? "갱신 중..." : isOffHours ? "운행 종료" : <>{formatLastUpdated(lastUpdated)} 갱신 · {countdown}초 후</>}
-      </span>
-      <button onClick={onManualRefresh} disabled={isRefreshing}
-        className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 dark:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-300" aria-label="새로고침">
-        <svg className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M2.985 19.644l3.181-3.182" />
-        </svg>
-      </button>
+      <RefreshStatusText lastUpdated={lastUpdated} isRefreshing={isRefreshing} countdown={countdown} isOffHours={isOffHours} />
+      <RefreshButton isRefreshing={isRefreshing} onManualRefresh={onManualRefresh} />
     </div>
   );
 }
@@ -648,23 +664,29 @@ function DashboardInner() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
+      <div className="space-y-2">
+        {/* Row 1: 제목 + 액션 버튼 */}
+        <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">대시보드</h1>
-          {weather && <WeatherBadge weather={weather} />}
+          <div className="flex items-center gap-1">
+            <RefreshButton isRefreshing={isRefreshing} onManualRefresh={handleManualRefresh} />
+            <button onClick={toggleNotify}
+              className={`rounded-md p-1.5 transition-colors ${notifyEnabled ? "text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20" : "text-gray-400 hover:bg-gray-100 dark:text-gray-500 dark:hover:bg-gray-700"}`}
+              aria-label={notifyEnabled ? "알림 끄기" : "알림 켜기"} title={notifyEnabled ? "출발 알림 ON" : "출발 알림 OFF"}>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+              </svg>
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <RefreshIndicator lastUpdated={data.lastUpdated} isRefreshing={isRefreshing} countdown={countdown} isOffHours={isOffHours} onManualRefresh={handleManualRefresh} />
-          <button onClick={toggleNotify}
-            className={`rounded-md p-1.5 transition-colors ${notifyEnabled ? "text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20" : "text-gray-400 hover:bg-gray-100 dark:text-gray-500 dark:hover:bg-gray-700"}`}
-            aria-label={notifyEnabled ? "알림 끄기" : "알림 켜기"} title={notifyEnabled ? "출발 알림 ON" : "출발 알림 OFF"}>
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
-            </svg>
-          </button>
+        {/* Row 2: 날씨 + 갱신 상태 */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          {weather ? <WeatherBadge weather={weather} /> : <span />}
+          <RefreshStatusText lastUpdated={data.lastUpdated} isRefreshing={isRefreshing} countdown={countdown} isOffHours={isOffHours} />
         </div>
+        {/* Row 3: 경로 필터 */}
+        {data.routes.length > 1 && <RouteFilter value={filter} onChange={setFilter} />}
       </div>
-      {data.routes.length > 1 && <RouteFilter value={filter} onChange={setFilter} />}
       {!primaryRoute ? (
         <div className="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
           <p className="text-sm text-gray-500 dark:text-gray-400">해당 유형의 경로가 없습니다.</p>
