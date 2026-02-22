@@ -55,7 +55,7 @@ export async function GET(
 
     // 대중교통 Leg이 없는 경우 (도보 전용 경로)
     const hasTransitLeg = savedRoute.legs.some(
-      (leg: { type: string }) => leg.type === "bus" || leg.type === "subway"
+      (leg: { type: string }) => leg.type === "bus" || leg.type === "subway" || leg.type === "train"
     );
 
     if (!hasTransitLeg) {

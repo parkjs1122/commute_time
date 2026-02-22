@@ -124,14 +124,25 @@ export class ETACalculator {
     intercityResults: Array<{ leg: RouteLeg; departures: IntercityDeparture[] }>
   ): ETAResult {
     const transitLegs = route.legs.filter(
-      (leg) => leg.type === "bus" || leg.type === "subway"
+      (leg) => leg.type === "bus" || leg.type === "subway" || leg.type === "train"
     );
 
     // route.legs 순서대로 도착 정보를 구성
     const legArrivals: LegArrivalInfo[] = [];
 
     for (const leg of transitLegs) {
-      if (isIntercityBusLeg(leg, route.routeSource)) {
+      if (leg.type === "train") {
+        // 기차 구간: 스케줄 기반 (실시간 조회 불가)
+        legArrivals.push({
+          type: "train",
+          lineName: leg.lineNames[0] || "열차",
+          arrivalMessage: `소요 ${leg.sectionTime}분`,
+          arrivalTime: leg.sectionTime * 60,
+          startStation: leg.startStation ?? undefined,
+          endStation: leg.endStation ?? undefined,
+          isSchedule: true,
+        });
+      } else if (isIntercityBusLeg(leg, route.routeSource)) {
         // 시외버스 구간: 시간표 기반
         const result = intercityResults.find((r) => r.leg === leg);
         if (result && result.departures.length > 0) {
@@ -301,7 +312,7 @@ export class ETACalculator {
 
     // 대중교통 구간을 시내/시외로 분류
     const transitLegs = route.legs.filter(
-      (leg) => leg.type === "bus" || leg.type === "subway"
+      (leg) => leg.type === "bus" || leg.type === "subway" || leg.type === "train"
     );
 
     const cityLegs = transitLegs.filter(
@@ -382,7 +393,7 @@ export class ETACalculator {
       // 3. 경로별 ETA 계산 (캐시에서 조회 — 추가 API 호출 없음)
       etaResults = routes.map((route) => {
         const transitLegs = route.legs.filter(
-          (leg) => leg.type === "bus" || leg.type === "subway"
+          (leg) => leg.type === "bus" || leg.type === "subway" || leg.type === "train"
         );
         const cityLegs = transitLegs.filter(
           (leg) => !isIntercityBusLeg(leg, route.routeSource)

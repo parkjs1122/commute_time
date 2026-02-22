@@ -361,37 +361,43 @@ export class KakaoMapParser {
           totalWalkTime += Math.round(
             (section.transferRoute.route.walkingTime?.value ?? 0) / 60
           );
+        } else if (section.vehicle.type === "TRAIN") {
+          // 기차 구간 (KTX, SRT, ITX, 무궁화 등)
+          const lineName =
+            section.vehicle.subType ??
+            route.vehicles ??
+            "열차";
+          legs.push({
+            type: "train",
+            lineNames: [lineName],
+            startStation: section.departure.name,
+            endStation: section.arrival.name,
+            sectionTime: Math.round(section.time.value / 60),
+          });
         } else if (
-          section.vehicle.type === "TRAIN" ||
           section.vehicle.type === "EXPRESS_BUS" ||
           section.vehicle.type === "INTERCITY_BUS"
         ) {
-          // 열차/시외버스 구간
-          const VEHICLE_TYPE_LABELS: Record<string, string> = {
+          // 시외/고속버스 구간
+          const BUS_TYPE_LABELS: Record<string, string> = {
             EXPRESS_BUS: "고속버스",
             INTERCITY_BUS: "시외버스",
-            TRAIN: "열차",
           };
           const lineName =
             section.vehicle.subType ??
             route.vehicles ??
-            VEHICLE_TYPE_LABELS[section.vehicle.type] ??
+            BUS_TYPE_LABELS[section.vehicle.type] ??
             section.vehicle.type;
-          const isIntercityBus =
-            section.vehicle.type === "EXPRESS_BUS" ||
-            section.vehicle.type === "INTERCITY_BUS";
           legs.push({
             type: "bus",
             lineNames: [lineName],
             startStation: section.departure.name,
             endStation: section.arrival.name,
             sectionTime: Math.round(section.time.value / 60),
-            ...(isIntercityBus && {
-              legSubType:
-                section.vehicle.type === "EXPRESS_BUS"
-                  ? "express_bus"
-                  : "intercity_bus",
-            }),
+            legSubType:
+              section.vehicle.type === "EXPRESS_BUS"
+                ? "express_bus"
+                : "intercity_bus",
           });
         }
       }

@@ -11,7 +11,7 @@ export interface Place {
 
 // 경로 구간 (Leg)
 export interface RouteLeg {
-  type: "bus" | "subway" | "walk";
+  type: "bus" | "subway" | "walk" | "train";
   lineNames: string[];
   lineColor?: string;
   startStation?: string;
@@ -50,7 +50,7 @@ export interface ArrivalInfo {
 
 // 대중교통 도착 정보 (대시보드용)
 export interface LegArrivalInfo {
-  type: "bus" | "subway";
+  type: "bus" | "subway" | "train";
   lineName: string;
   arrivalMessage: string;
   arrivalTime: number; // 초

@@ -42,7 +42,7 @@ export default function LegDetail({ legs }: { legs: LegData[] }) {
         const names =
           leg.lineNames.length > 0
             ? leg.lineNames
-            : [leg.type === "bus" ? "버스" : "지하철"];
+            : [leg.type === "train" ? "기차" : leg.type === "bus" ? "버스" : "지하철"];
 
         return (
           <div key={key}>
@@ -81,7 +81,7 @@ export default function LegDetail({ legs }: { legs: LegData[] }) {
               {names.map((name, nameIdx) => (
                 <TransportBadge
                   key={`${key}-${nameIdx}`}
-                  type={leg.type === "subway" ? "subway" : "bus"}
+                  type={leg.type === "subway" ? "subway" : leg.type === "train" ? "train" : "bus"}
                   lineName={name}
                 />
               ))}

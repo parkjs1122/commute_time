@@ -58,7 +58,7 @@ model RouteLeg {
   savedRoute     SavedRoute @relation(fields: [savedRouteId], references: [id], onDelete: Cascade)
   order          Int        // Leg 순서 (0부터)
 
-  type           String     // "bus" | "subway" | "walk"
+  type           String     // "bus" | "subway" | "walk" | "train"
   lineNames      String[]   @default([])  // 노선 번호/이름 배열
   lineColor      String?    // 노선 색상
   startStation   String?    // 승차 정류장
@@ -68,7 +68,7 @@ model RouteLeg {
   stationCount   Int?       // 정차 역 수
   sectionTime    Int        // 구간 소요 시간 (분)
   distance       Int?       // 구간 거리 (미터)
-  legSubType     String?    // "intercity_bus" | "express_bus" (시외/고속버스 구분)
+  legSubType     String?    // "intercity_bus" | "express_bus" (시외/고속버스 구분) — 기차는 type="train"으로 구분
 
   @@index([savedRouteId])
 }

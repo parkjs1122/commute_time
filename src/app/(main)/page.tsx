@@ -21,7 +21,7 @@ type GroupedMessage = {
 };
 
 type GroupedLine = {
-  type: "bus" | "subway";
+  type: "bus" | "subway" | "train";
   lineName: string;
   messages: GroupedMessage[];
   isSchedule?: boolean;
@@ -51,7 +51,7 @@ function formatGroupedMessages(messages: GroupedMessage[]): string {
 
 function groupByLeg(
   arrivals: {
-    type: "bus" | "subway";
+    type: "bus" | "subway" | "train";
     lineName: string;
     arrivalMessage: string;
     startStation?: string;
