@@ -15,10 +15,10 @@ export async function PATCH(
   try {
     const session = await requireAuth();
     const { id } = await params;
-    const body = await parseRequestBody<{ alias?: string; routeType?: string }>(request);
+    const body = await parseRequestBody<{ alias?: string; routeType?: string; memo?: string | null }>(request);
 
-    if (!body.alias && !body.routeType) {
-      throw new BadRequestError("alias 또는 routeType 필드가 필요합니다.");
+    if (!body.alias && !body.routeType && body.memo === undefined) {
+      throw new BadRequestError("alias, routeType 또는 memo 필드가 필요합니다.");
     }
 
     let updatedRoute;
@@ -39,6 +39,15 @@ export async function PATCH(
         id,
         session.user.id,
         body.routeType
+      );
+    }
+
+    if (body.memo !== undefined) {
+      const memoValue = body.memo ? body.memo.trim().slice(0, 200) : null;
+      updatedRoute = await RouteService.updateMemo(
+        id,
+        session.user.id,
+        memoValue
       );
     }
 

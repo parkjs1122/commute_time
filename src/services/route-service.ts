@@ -102,6 +102,20 @@ export const RouteService = {
   },
 
   /**
+   * 경로 메모를 수정합니다.
+   * 소유자 확인 후 업데이트합니다.
+   */
+  async updateMemo(routeId: string, userId: string, memo: string | null) {
+    await this.findRouteOrThrow(routeId, userId);
+
+    return prisma.savedRoute.update({
+      where: { id: routeId },
+      data: { memo },
+      include: INCLUDE_ORDERED_LEGS,
+    });
+  },
+
+  /**
    * 경로 타입을 수정합니다.
    * 소유자 확인 후 업데이트합니다.
    */

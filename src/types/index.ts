@@ -104,3 +104,36 @@ export interface DashboardResponse {
   routes: ETAResult[];
   lastUpdated: string;
 }
+
+// 날씨 데이터
+export interface WeatherData {
+  temperature: number;
+  weatherCode: number;
+  description: string;
+  isRainy: boolean;
+  icon: string;
+}
+
+// 통계 응답
+export interface StatisticsResponse {
+  routeId: string;
+  days: number;
+  overall: {
+    avgTotalETA: number;
+    minTotalETA: number;
+    maxTotalETA: number;
+    recordCount: number;
+  } | null;
+  daily: Array<{
+    date: string;
+    avgTotalETA: number;
+    avgWaitTime: number;
+    count: number;
+  }>;
+  byDayOfWeek: Array<{
+    dayOfWeek: number;
+    label: string;
+    avgTotalETA: number;
+    count: number;
+  }>;
+}

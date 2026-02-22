@@ -425,9 +425,44 @@ export class ETACalculator {
       (a, b) => (priority[a.routeType] ?? 1) - (priority[b.routeType] ?? 1)
     );
 
+    // ETA 기록 저장 (비동기, 실패해도 무시)
+    this.recordETAs(etaResults).catch((err) =>
+      console.error("[ETACalculator] ETA 기록 저장 실패:", err)
+    );
+
     return {
       routes: etaResults,
       lastUpdated: new Date().toISOString(),
     };
+  }
+
+  /**
+   * ETA 결과를 DB에 기록합니다 (통계용).
+   * 추정치가 아닌 실제 데이터만 저장하며, 같은 경로는 5분 이내 중복 저장하지 않습니다.
+   */
+  private async recordETAs(results: ETAResult[]): Promise<void> {
+    const realResults = results.filter((r) => !r.isEstimate && r.estimatedArrival);
+    if (realResults.length === 0) return;
+
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+    for (const r of realResults) {
+      // 5분 이내 동일 경로 기록이 있으면 건너뜀
+      const recent = await prisma.eTARecord.findFirst({
+        where: { routeId: r.routeId, recordedAt: { gte: fiveMinAgo } },
+        select: { id: true },
+      });
+      if (recent) continue;
+
+      await prisma.eTARecord.create({
+        data: {
+          routeId: r.routeId,
+          totalETA: r.waitTime + r.travelTime * 60,
+          waitTime: r.waitTime,
+          travelTime: r.travelTime,
+          isEstimate: r.isEstimate,
+        },
+      });
+    }
   }
 }

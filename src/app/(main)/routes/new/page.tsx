@@ -95,6 +95,49 @@ function RouteResultCard({
   );
 }
 
+type SortOption = "time" | "fare" | "transfer";
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "time", label: "최단시간" },
+  { value: "transfer", label: "최소환승" },
+  { value: "fare", label: "최저요금" },
+];
+
+function SortSelector({ value, onChange }: { value: SortOption; onChange: (v: SortOption) => void }) {
+  return (
+    <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700">
+      {SORT_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          className={`px-2 py-1 text-xs font-medium transition-colors first:rounded-l-lg last:rounded-r-lg ${
+            value === opt.value
+              ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+              : "text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800"
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function sortRoutes(routes: TransitRoute[], sortBy: SortOption): TransitRoute[] {
+  return [...routes].sort((a, b) => {
+    switch (sortBy) {
+      case "time":
+        return a.totalTime - b.totalTime;
+      case "fare":
+        return (a.fare ?? 99999) - (b.fare ?? 99999);
+      case "transfer":
+        return a.transferCount - b.transferCount;
+      default:
+        return 0;
+    }
+  });
+}
+
 export default function NewRoutePage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -105,6 +148,9 @@ export default function NewRoutePage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+
+  // Sort & compare
+  const [sortBy, setSortBy] = useState<SortOption>("time");
 
   // Swap key to force re-render of PlaceSearchInput
   const [swapKey, setSwapKey] = useState(0);
@@ -345,6 +391,7 @@ export default function NewRoutePage() {
     }
   }
 
+  const sortedRoutes = sortRoutes(routes, sortBy);
   const canSearch = origin !== null && destination !== null;
   const reverseTypeLabel = savedRouteType === "commute" ? "퇴근" : "출근";
 
@@ -425,10 +472,15 @@ export default function NewRoutePage() {
       {/* 검색 결과 */}
       {hasSearched && !isSearching && routes.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            탐색 결과 ({routes.length}개)
-          </h2>
-          {routes.map((route, index) => (
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+              탐색 결과 ({routes.length}개)
+            </h2>
+            {routes.length > 1 && (
+              <SortSelector value={sortBy} onChange={setSortBy} />
+            )}
+          </div>
+          {sortedRoutes.map((route, index) => (
             <RouteResultCard
               key={index}
               route={route}
