@@ -644,8 +644,7 @@ function DashboardInner() {
   }
 
   const filteredRoutes = filter === "all" ? data.routes : data.routes.filter((r) => r.routeType === filter);
-  const displayRoutes = filteredRoutes.length > 0 ? filteredRoutes : data.routes;
-  const [primaryRoute, ...additionalRoutes] = displayRoutes;
+  const [primaryRoute, ...additionalRoutes] = filteredRoutes;
 
   return (
     <div className="space-y-4">
@@ -666,12 +665,20 @@ function DashboardInner() {
         </div>
       </div>
       {data.routes.length > 1 && <RouteFilter value={filter} onChange={setFilter} />}
-      <PrimaryETACard route={primaryRoute} />
-      {additionalRoutes.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">다른 경로</h2>
-          {additionalRoutes.map((route) => <AdditionalRouteCard key={route.routeId} route={route} />)}
+      {!primaryRoute ? (
+        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
+          <p className="text-sm text-gray-500 dark:text-gray-400">해당 유형의 경로가 없습니다.</p>
         </div>
+      ) : (
+        <>
+          <PrimaryETACard route={primaryRoute} />
+          {additionalRoutes.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">다른 경로</h2>
+              {additionalRoutes.map((route) => <AdditionalRouteCard key={route.routeId} route={route} />)}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
