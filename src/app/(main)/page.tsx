@@ -178,7 +178,7 @@ function WeatherBadge({ weather }: { weather: WeatherData }) {
     <div className="flex items-center gap-1.5">
       <span className="text-sm">{weatherIcons[weather.icon] ?? "\uD83C\uDF24\uFE0F"}</span>
       <span className="text-xs text-gray-500 dark:text-gray-400">
-        {weather.temperature}\u00B0 {weather.description}
+        {weather.temperature}{"°"} {weather.description}
       </span>
       {weather.isRainy && (
         <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
