@@ -41,8 +41,12 @@ const WEATHER_CODES: Record<number, { description: string; icon: string; rainy: 
   99: { description: "강한 뇌우+우박", icon: "thunderstorm", rainy: true },
 };
 
-// In-memory cache (1 hour TTL)
-let weatherCache: { data: WeatherData; expiresAt: number } | null = null;
+// In-memory cache (1 hour TTL, keyed by rounded coordinates)
+let weatherCache: { key: string; data: WeatherData; expiresAt: number } | null = null;
+
+function cacheKey(lat: number, lng: number): string {
+  return `${lat.toFixed(1)},${lng.toFixed(1)}`;
+}
 
 // Default coordinates: Seoul (Gwanghwamun)
 const DEFAULT_LAT = 37.5759;
@@ -53,7 +57,8 @@ export async function getWeather(
   lng: number = DEFAULT_LNG
 ): Promise<WeatherData | null> {
   // Check cache
-  if (weatherCache && Date.now() < weatherCache.expiresAt) {
+  const key = cacheKey(lat, lng);
+  if (weatherCache && weatherCache.key === key && Date.now() < weatherCache.expiresAt) {
     return weatherCache.data;
   }
 
@@ -80,7 +85,7 @@ export async function getWeather(
     };
 
     // Cache for 1 hour
-    weatherCache = { data, expiresAt: Date.now() + 60 * 60 * 1000 };
+    weatherCache = { key, data, expiresAt: Date.now() + 60 * 60 * 1000 };
 
     return data;
   } catch (error) {

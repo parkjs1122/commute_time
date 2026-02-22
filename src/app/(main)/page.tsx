@@ -599,7 +599,19 @@ function DashboardInner() {
   useEffect(() => { fetchDashboardRef.current = fetchDashboard; }, [fetchDashboard]);
 
   useEffect(() => {
-    fetch("/api/weather").then((r) => r.json()).then((w) => { if (w) setWeather(w); }).catch(() => {});
+    function fetchWeather(lat?: number, lng?: number) {
+      const params = lat != null && lng != null ? `?lat=${lat}&lng=${lng}` : "";
+      fetch(`/api/weather${params}`).then((r) => r.json()).then((w) => { if (w) setWeather(w); }).catch(() => {});
+    }
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
+        () => fetchWeather(),
+        { timeout: 5000 },
+      );
+    } else {
+      fetchWeather();
+    }
   }, []);
 
   useEffect(() => {
