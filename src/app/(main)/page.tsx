@@ -472,6 +472,10 @@ function useNotification() {
 
   const notify = useCallback((route: ETAResult) => {
     if (!enabled || !route.estimatedArrival) return;
+    // 시간대에 따라 관련 경로만 알림: 오전(~13시)=출근, 오후(13시~)=퇴근
+    const hour = new Date().getHours();
+    const relevantType = hour < 13 ? "commute" : "return";
+    if (route.routeType && route.routeType !== relevantType) return;
     const key = `${route.routeId}-${Math.floor(route.waitTime / 60)}`;
     if (route.waitTime <= 180 && route.waitTime > 0 && !notifiedRef.current.has(key)) {
       notifiedRef.current.add(key);
