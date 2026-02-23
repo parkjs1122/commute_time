@@ -4,6 +4,7 @@ import { determineSubwayDirection } from "@/data/subway-stations";
 import { willTrainReachStation, isStationKnown } from "@/data/subway-graph";
 
 // 서울 버스 도착 정보 API XML 응답 타입
+// API: http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid
 interface BusArrivalItem {
   stId: string;
   stNm: string;
@@ -15,16 +16,17 @@ interface BusArrivalItem {
   stationNm: string;
   arrmsg1: string;
   arrmsg2: string;
-  arrTime1?: number;
-  arrTime2?: number;
-  traTime1?: number;
-  traTime2?: number;
+  traTime1?: number; // 첫번째 버스 도착 예정 시간(초)
+  traTime2?: number; // 두번째 버스 도착 예정 시간(초)
   isLast1?: number;
   isLast2?: number;
   rerideNum1?: number;
   rerideNum2?: number;
   sectNm?: string;
   nxtStn?: string;
+  adirection?: string; // 방향 (예: "마포구청")
+  routeType?: string; // 노선 유형 (1=공항, 2=마을, 3=간선, 4=지선 등)
+  term?: number; // 배차간격(분)
 }
 
 interface BusArrivalResponse {
@@ -287,16 +289,19 @@ export class RealtimeTransitService {
 
   /**
    * 서울 버스 도착 정보 조회
-   * API: http://ws.bus.go.kr/api/rest/arrive/getArrInfoByRouteAll
+   * API: http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid
+   * @param stationId - arsId (예: "13-123")
    */
   private async getSeoulBusArrival(stationId: string): Promise<ArrivalInfo[]> {
     try {
+      // arsId 포맷 변환: "13-123" → "13123" (API는 대시 없는 5자리 숫자 형식)
+      const arsId = stationId.replace(/-/g, "");
       const params = new URLSearchParams({
         serviceKey: this.dataGoKrKey,
-        stId: stationId,
+        arsId,
       });
 
-      const url = `http://ws.bus.go.kr/api/rest/arrive/getArrInfoByRouteAll?${params.toString()}`;
+      const url = `http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid?${params.toString()}`;
 
       const response = await fetch(url, {
         signal: AbortSignal.timeout(10000),
@@ -331,7 +336,7 @@ export class RealtimeTransitService {
         const msg1 = item.arrmsg1 || "";
         const msg2 = item.arrmsg2 || "";
         const lineName = item.busRouteAbrv || item.rtNm || "";
-        const direction = item.nxtStn || item.sectNm || "";
+        const direction = item.adirection || item.nxtStn || item.sectNm || "";
         const stationName = item.stNm || "";
 
         // 첫 번째 버스
@@ -341,7 +346,7 @@ export class RealtimeTransitService {
             lineName,
             direction,
             arrivalTime:
-              typeof item.arrTime1 === "number" ? item.arrTime1 : 0,
+              typeof item.traTime1 === "number" ? item.traTime1 : 0,
             arrivalMessage: msg1 || "정보 없음",
             remainingStops: item.rerideNum1 ?? undefined,
             vehicleType: "버스",
@@ -360,7 +365,7 @@ export class RealtimeTransitService {
             lineName,
             direction,
             arrivalTime:
-              typeof item.arrTime2 === "number" ? item.arrTime2 : 0,
+              typeof item.traTime2 === "number" ? item.traTime2 : 0,
             arrivalMessage: msg2,
             remainingStops: item.rerideNum2 ?? undefined,
             vehicleType: "버스",
