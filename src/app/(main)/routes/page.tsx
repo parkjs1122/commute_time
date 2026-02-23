@@ -115,12 +115,12 @@ function MemoEditor({
     return (
       <button
         onClick={() => { setIsEditing(true); setMemo(initialMemo ?? ""); }}
-        className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        title={initialMemo ? "메모 수정" : "메모 추가"}
+        className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
       >
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
         </svg>
-        {initialMemo ? "메모 수정" : "메모 추가"}
       </button>
     );
   }
@@ -328,39 +328,50 @@ function RouteCard({
       </div>
 
       {/* 액션 영역 */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
-        <button
-          onClick={() => { setIsEditing(true); setEditAlias(route.alias); }}
-          className="rounded-lg px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
-        >
-          이름 수정
-        </button>
-        <MemoEditor routeId={route.id} initialMemo={route.memo} onSaved={(memo) => onChangeMemo(route.id, memo)} />
-        <RouteTypeSelector value={route.routeType} onChange={(type) => onChangeRouteType(route.id, type)} />
-        <button
-          onClick={handleCreateReverse}
-          disabled={isCreatingReverse || routeCount >= 5}
-          className="rounded-lg px-3 py-2 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
-        >
-          {isCreatingReverse ? (
-            <span className="inline-flex items-center gap-1">
-              <Spinner className="h-3 w-3" /> 생성 중...
-            </span>
-          ) : (
-            <>
-              <svg className="mr-0.5 inline h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+      <div className="space-y-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+        {/* Row 1: 속성 & 편집 */}
+        <div className="flex items-center justify-between">
+          <RouteTypeSelector value={route.routeType} onChange={(type) => onChangeRouteType(route.id, type)} />
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { setIsEditing(true); setEditAlias(route.alias); }}
+              title="이름 수정"
+              className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
               </svg>
-              역방향
-            </>
-          )}
-        </button>
-        <button
-          onClick={() => onDelete(route.id, route.alias)}
-          className="rounded-lg px-3 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-        >
-          삭제
-        </button>
+            </button>
+            <MemoEditor routeId={route.id} initialMemo={route.memo} onSaved={(memo) => onChangeMemo(route.id, memo)} />
+          </div>
+        </div>
+        {/* Row 2: 역방향 생성 & 삭제 */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={handleCreateReverse}
+            disabled={isCreatingReverse || routeCount >= 5}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
+          >
+            {isCreatingReverse ? (
+              <span className="inline-flex items-center gap-1">
+                <Spinner className="h-3 w-3" /> 생성 중...
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                </svg>
+                역방향 생성
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => onDelete(route.id, route.alias)}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+          >
+            삭제
+          </button>
+        </div>
       </div>
     </div>
   );
