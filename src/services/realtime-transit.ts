@@ -335,7 +335,7 @@ export class RealtimeTransitService {
       for (const item of itemArray) {
         const msg1 = item.arrmsg1 || "";
         const msg2 = item.arrmsg2 || "";
-        const lineName = item.busRouteAbrv || item.rtNm || "";
+        const lineName = String(item.busRouteAbrv || item.rtNm || "");
         const direction = item.adirection || item.nxtStn || item.sectNm || "";
         const stationName = item.stNm || "";
 
